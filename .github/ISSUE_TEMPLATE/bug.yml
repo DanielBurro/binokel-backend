@@ -1,0 +1,34 @@
+name: "Bug Report"
+description: "Einen Fehler melden oder dokumentieren"
+title: "[Bug]: "
+labels: ["bug"]
+projects: ["DanielBurro/Studienarbeit"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Was funktioniert nicht?
+      placeholder: "Beschreibe kurz den Fehler und das erwartete Verhalten."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zur Reproduktion
+      placeholder: |
+        1. Spiel starten
+        2. Karte X ausspielen
+        3. Fehlermeldung Y im Log / in der Konsole
+    validations:
+      required: true
+  - type: dropdown
+    id: affected_part
+    attributes:
+      label: Betroffener Bereich
+      options:
+        - "Backend / API"
+        - "Frontend / UI"
+        - "Verbindung / WebSocket"
+        - "Noch unklar"
+    validations:
+      required: true

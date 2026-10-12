@@ -1,0 +1,36 @@
+name: "Feature / Aufgabe"
+description: "Ein neues Feature oder eine technische Teilaufgabe beschreiben"
+title: "[Feature]: "
+labels: ["enhancement"]
+projects: ["DanielBurro/Studienarbeit"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kurz und prägnant halten – das Ziel ist Klarheit für die Umsetzung.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Ziel / Problembeschreibung
+      description: Was soll umgesetzt werden und warum?
+      placeholder: "Als Spieler möchte ich meine Karten sortieren können..."
+    validations:
+      required: true
+  - type: textarea
+    id: api_contract
+    attributes:
+      label: Schnittstelle / API-Absprache (falls relevant)
+      description: Betrifft dies beide Repos? Endpunkt, Schema, Payload oder Event.
+      placeholder: "POST /api/v1/game/play -> Body: { cardId: 123 }"
+    validations:
+      required: false
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Definition of Done / Akzeptanzkriterien
+      value: |
+        - [ ] Logik / UI implementiert
+        - [ ] Tests geschrieben oder manuell verifiziert
+        - [ ] PR erstellt und Partner als Reviewer eingetragen
+    validations:
+      required: true
