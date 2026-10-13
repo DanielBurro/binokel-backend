@@ -7,6 +7,19 @@ Netzwerkfähige Mehrspieler-Anwendung für das Kartenspiel Binokel (Studienarbei
 - `backend/`: Server-Logik und Regel-Engine
 - `frontend/`: Mobiler Client (Cross-Platform)
 
+## Entwicklung
+
+Voraussetzung: Node.js ≥ 22.22.1 (siehe `.nvmrc`).
+
+```bash
+npm ci            # Abhängigkeiten installieren und Git-Hooks einrichten
+npm run dev       # Server mit Hot-Reload starten (Port 3000)
+npm test          # Tests ausführen
+npm run lint      # ESLint
+```
+
+Optionale Umgebungsvariablen: `PORT`, `CORS_ORIGIN` (kommaseparierte Origins), `RECONNECT_GRACE_MS`, `ROOM_TTL_MS`.
+
 ## Git Commit-Konventionen
 
 Alle Commit-Nachrichten folgen der Spezifikation der [Conventional Commits](https://www.conventionalcommits.org/):

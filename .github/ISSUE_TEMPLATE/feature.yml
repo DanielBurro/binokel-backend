@@ -1,8 +1,8 @@
-name: "Feature / Aufgabe"
-description: "Ein neues Feature oder eine technische Teilaufgabe beschreiben"
-title: "[Feature]: "
-labels: ["enhancement"]
-projects: ["DanielBurro/Studienarbeit"]
+name: 'Feature / Aufgabe'
+description: 'Ein neues Feature oder eine technische Teilaufgabe beschreiben'
+title: '[Feature]: '
+labels: ['enhancement']
+projects: ['DanielBurro/Studienarbeit']
 body:
   - type: markdown
     attributes:
@@ -13,7 +13,7 @@ body:
     attributes:
       label: Ziel / Problembeschreibung
       description: Was soll umgesetzt werden und warum?
-      placeholder: "Als Spieler möchte ich meine Karten sortieren können..."
+      placeholder: 'Als Spieler möchte ich meine Karten sortieren können...'
     validations:
       required: true
   - type: textarea
@@ -21,7 +21,7 @@ body:
     attributes:
       label: Schnittstelle / API-Absprache (falls relevant)
       description: Betrifft dies beide Repos? Endpunkt, Schema, Payload oder Event.
-      placeholder: "POST /api/v1/game/play -> Body: { cardId: 123 }"
+      placeholder: 'POST /api/v1/game/play -> Body: { cardId: 123 }'
     validations:
       required: false
   - type: textarea

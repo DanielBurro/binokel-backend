@@ -1,14 +1,14 @@
-name: "Bug Report"
-description: "Einen Fehler melden oder dokumentieren"
-title: "[Bug]: "
-labels: ["bug"]
-projects: ["DanielBurro/Studienarbeit"]
+name: 'Bug Report'
+description: 'Einen Fehler melden oder dokumentieren'
+title: '[Bug]: '
+labels: ['bug']
+projects: ['DanielBurro/Studienarbeit']
 body:
   - type: textarea
     id: problem
     attributes:
       label: Was funktioniert nicht?
-      placeholder: "Beschreibe kurz den Fehler und das erwartete Verhalten."
+      placeholder: 'Beschreibe kurz den Fehler und das erwartete Verhalten.'
     validations:
       required: true
   - type: textarea
@@ -26,9 +26,9 @@ body:
     attributes:
       label: Betroffener Bereich
       options:
-        - "Backend / API"
-        - "Frontend / UI"
-        - "Verbindung / WebSocket"
-        - "Noch unklar"
+        - 'Backend / API'
+        - 'Frontend / UI'
+        - 'Verbindung / WebSocket'
+        - 'Noch unklar'
     validations:
       required: true
