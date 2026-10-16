@@ -11,12 +11,47 @@ Netzwerkfähige Mehrspieler-Anwendung für das Kartenspiel Binokel (Studienarbei
 
 Voraussetzung: Node.js ≥ 22.22.1 (siehe `.nvmrc`).
 
+### Schnellstart
+
 ```bash
-npm ci            # Abhängigkeiten installieren und Git-Hooks einrichten
-npm run dev       # Server mit Hot-Reload starten (Port 3000)
-npm test          # Tests ausführen
-npm run lint      # ESLint
+npm ci              # Abhängigkeiten installieren und Git-Hooks einrichten
+npm run dev         # Server mit Hot-Reload starten (Port 3000)
+npm test            # Tests ausführen
+npm run lint        # ESLint ausführen
+npm run format      # Code mit Prettier formatieren
 ```
+
+### Verfügbare NPM-Befehle
+
+| Befehl                      | Beschreibung                                                          |
+| :-------------------------- | :-------------------------------------------------------------------- |
+| **`npm ci`**                | Abhängigkeiten exakt installieren und Git-Hooks via Husky einrichten  |
+| **`npm run dev`**           | Entwicklungsserver mit Hot-Reload starten (`tsx watch src/index.ts`)  |
+| **`npm run build`**         | TypeScript-Code kompilieren (`tsc`)                                   |
+| **`npm start`**             | Kompiliertes Backend starten (`node dist/index.js`)                   |
+| **`npm test`**              | Vitest-Tests einmalig ausführen (`vitest run`)                        |
+| **`npm run test:watch`**    | Tests im interaktiven Watch-Modus starten (`vitest`)                  |
+| **`npm run test:coverage`** | Tests mit V8-Coverage-Bericht ausführen (`vitest run --coverage`)     |
+| **`npm run lint`**          | Statische Code-Analyse mit ESLint durchführen (`eslint src/`)         |
+| **`npm run lint:fix`**      | Behebbare ESLint-Fehler automatisch korrigieren (`eslint src/ --fix`) |
+| **`npm run format`**        | Code mit Prettier automatisch formatieren (`prettier --write .`)      |
+| **`npm run format:check`**  | Formatierung aller Dateien mit Prettier prüfen (`prettier --check .`) |
+
+### Verfügbare NPM-Befehle
+
+| Befehl | Beschreibung |
+| :---------------------- | :-------------------------------------------------------------------------- |
+| **`npm ci`**            | Abhängigkeiten exakt installieren und Git-Hooks via Husky einrichten        |
+| **`npm run dev`**       | Entwicklungsserver mit Hot-Reload starten (`tsx watch src/index.ts`)        |
+| **`npm run build`**     | TypeScript-Code kompilieren (`tsc`)                                         |
+| **`npm start`**         | Kompiliertes Backend starten (`node dist/index.js`)                         |
+| **`npm test`**          | Vitest-Tests einmalig ausführen (`vitest run`)                               |
+| **`npm run test:watch`**| Tests im interaktiven Watch-Modus starten (`vitest`)                        |
+| **`npm run test:coverage`** | Tests mit V8-Coverage-Bericht ausführen (`vitest run --coverage`)        |
+| **`npm run lint`**      | Statische Code-Analyse mit ESLint durchführen (`eslint src/`)               |
+| **`npm run lint:fix`**  | Behebbare ESLint-Fehler automatisch korrigieren (`eslint src/ --fix`)       |
+| **`npm run format`**    | Code mit Prettier automatisch formatieren (`prettier --write .`)           |
+| **`npm run format:check`** | Formatierung aller Dateien mit Prettier prüfen (`prettier --check .`)     |
 
 Optionale Umgebungsvariablen: `PORT`, `CORS_ORIGIN` (kommaseparierte Origins), `RECONNECT_GRACE_MS`, `ROOM_TTL_MS`.
 
