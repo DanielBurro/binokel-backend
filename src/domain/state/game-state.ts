@@ -55,6 +55,12 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 13–18 hinzu. */
+export function activeSeat(state: GameState): Seat | null {
+  if (state.phase !== 'bidding' || state.round === null) return null;
+  return state.round.bidding.activeSeat;
+}
+
 const PHASE_SUCCESSORS: Readonly<Partial<Record<Phase, RoundPhase>>> = {
   bidding: 'dabb',
   dabb: 'declare',
