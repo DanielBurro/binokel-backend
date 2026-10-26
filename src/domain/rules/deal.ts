@@ -1,7 +1,7 @@
 import type { Card } from '../cards/card';
 import { dealPattern, type DealConfig } from '../config/deal-pattern';
 import type { PlayerCount } from '../config/game-config';
-import { assertSeat, type Seat } from './parties';
+import { assertSeat, nextSeat, type Seat } from './parties';
 
 export interface DealResult {
   /** Nach Sitz indiziert. */
@@ -10,7 +10,7 @@ export interface DealResult {
 }
 
 export function forehandOf(dealer: Seat, playerCount: PlayerCount): Seat {
-  return (dealer + 1) % playerCount;
+  return nextSeat(dealer, playerCount);
 }
 
 /** Verteilt ein bereits gemischtes Blatt ab Vorhand nach dem Muster der Konfiguration. */
@@ -37,8 +37,10 @@ export function deal(shuffledDeck: readonly Card[], config: DealConfig, dealer: 
       dabb.push(...take(step.count));
       continue;
     }
-    for (let offset = 0; offset < playerCount; offset++) {
-      hands[(forehand + offset) % playerCount].push(...take(step.count));
+    let seat = forehand;
+    for (let served = 0; served < playerCount; served++) {
+      hands[seat].push(...take(step.count));
+      seat = nextSeat(seat, playerCount);
     }
   }
 

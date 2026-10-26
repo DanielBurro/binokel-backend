@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertSeat, partyCount, partyOf } from './parties';
+import { assertSeat, isSeat, nextSeat, partyCount, partyOf } from './parties';
 
 describe('partyOf', () => {
   it('lässt bei drei Spielern jeden für sich spielen', () => {
@@ -19,5 +19,21 @@ describe('partyOf', () => {
     expect(() => partyOf(3, 3)).toThrow(RangeError);
     expect(() => partyOf(-1, 4)).toThrow(RangeError);
     expect(() => assertSeat(1.5, 4)).toThrow(RangeError);
+  });
+});
+
+describe('nextSeat', () => {
+  it('geht reihum und springt vom letzten Sitz auf Sitz 0', () => {
+    expect([0, 1, 2].map((seat) => nextSeat(seat, 3))).toEqual([1, 2, 0]);
+    expect([0, 1, 2, 3].map((seat) => nextSeat(seat, 4))).toEqual([1, 2, 3, 0]);
+  });
+});
+
+describe('isSeat', () => {
+  it('erkennt gültige Sitze, ohne zu werfen', () => {
+    expect(isSeat(0, 3)).toBe(true);
+    expect(isSeat(3, 4)).toBe(true);
+    expect(isSeat(3, 3)).toBe(false);
+    expect(isSeat(0.5, 3)).toBe(false);
   });
 });
