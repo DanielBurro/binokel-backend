@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import type { GameEventBatch } from '../../../application/ports/outbound/game-broadcaster.port';
 import type { PlayerView } from '../../../application/projection/player-view';
+import type { RoomView } from '../../../application/projection/room-view';
 import { RANKS, SUITS, type Card } from '../../../domain/cards/card';
 import { GAME_MODES, type GameConfig, type SpecialRules } from '../../../domain/config/game-config';
 import { ABORT_REASONS, PHASES } from '../../../domain/state/game-state';
@@ -165,7 +167,7 @@ export const roomViewSchema = server(
     roomId: roomIdSchema,
     config: gameConfigSchema,
     seats: z.array(seatInfoSchema.nullable()),
-  }),
+  }) satisfies z.ZodType<RoomView>,
 );
 
 export const playerViewSchema = server(
@@ -217,7 +219,10 @@ const gameEventSchema = server(
 
 export const gameEventsSchema = server(
   'GameEvents',
-  z.object({ version: versionSchema, events: z.array(gameEventSchema) }),
+  z.object({
+    version: versionSchema,
+    events: z.array(gameEventSchema),
+  }) satisfies z.ZodType<GameEventBatch>,
 );
 
 // Ereignisnamen
@@ -244,8 +249,6 @@ export type CreateRoomPayload = z.output<typeof createRoomPayloadSchema>;
 export type JoinRoomPayload = z.output<typeof joinRoomPayloadSchema>;
 export type ResumeSessionPayload = z.output<typeof resumeSessionPayloadSchema>;
 export type IntentPayload = z.output<typeof intentPayloadSchema>;
-export type RoomView = z.output<typeof roomViewSchema>;
-export type GameEvents = z.output<typeof gameEventsSchema>;
 
 // Export für das Frontend (`npm run protocol:export`)
 
