@@ -6,6 +6,7 @@ import {
   MAX_BID,
   OPENING_BID,
   bid,
+  minimumBid,
   openBidding,
   pass,
   type BiddingResult,
@@ -26,6 +27,13 @@ describe('openBidding', () => {
       activeSeat: 2,
     });
     expect(openBidding(3, 4).activeSeat).toBe(0);
+  });
+});
+
+describe('minimumBid', () => {
+  it('liegt einen Schritt über dem Höchstgebot', () => {
+    expect(minimumBid(openBidding(1, 3))).toBe(OPENING_BID + BID_STEP);
+    expect(minimumBid({ ...openBidding(1, 3), highestBid: MAX_BID - BID_STEP })).toBe(MAX_BID);
   });
 });
 

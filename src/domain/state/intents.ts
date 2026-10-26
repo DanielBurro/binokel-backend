@@ -22,14 +22,16 @@ export type GameEvent =
   | { readonly type: 'biddingWon'; readonly declarer: Seat; readonly bid: number }
   | { readonly type: 'gameAborted'; readonly reason: AbortReason };
 
-export type IntentErrorCode =
-  | 'INVALID_ACTOR'
-  | 'WRONG_PHASE'
-  | 'NOT_YOUR_TURN'
-  | 'BID_TOO_LOW'
-  | 'BID_NOT_IN_STEPS'
-  | 'BID_ABOVE_LIMIT'
-  | 'INVALID_DECK';
+export const INTENT_ERROR_CODES = [
+  'INVALID_ACTOR',
+  'WRONG_PHASE',
+  'NOT_YOUR_TURN',
+  'BID_TOO_LOW',
+  'BID_NOT_IN_STEPS',
+  'BID_ABOVE_LIMIT',
+  'INVALID_DECK',
+] as const;
+export type IntentErrorCode = (typeof INTENT_ERROR_CODES)[number];
 
 export type IntentFailure = { readonly ok: false; readonly code: IntentErrorCode };
 

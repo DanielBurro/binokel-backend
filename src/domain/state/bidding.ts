@@ -22,6 +22,11 @@ export function openBidding(forehand: Seat, playerCount: PlayerCount): BiddingSt
   };
 }
 
+/** Kleinstes zulässiges Gebot des Sitzes, der am Zug ist. */
+export function minimumBid(bidding: BiddingState): number {
+  return bidding.highestBid + BID_STEP;
+}
+
 export function bid(
   bidding: BiddingState,
   seat: Seat,
@@ -30,7 +35,7 @@ export function bid(
 ): BiddingResult {
   if (seat !== bidding.activeSeat) return fail('NOT_YOUR_TURN');
   if (amount > MAX_BID) return fail('BID_ABOVE_LIMIT');
-  if (amount < bidding.highestBid + BID_STEP) return fail('BID_TOO_LOW');
+  if (amount < minimumBid(bidding)) return fail('BID_TOO_LOW');
   if (amount % BID_STEP !== 0) return fail('BID_NOT_IN_STEPS');
 
   return advance({ ...bidding, highestBid: amount, highestBidder: seat }, seat, playerCount, [

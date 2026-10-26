@@ -14,7 +14,8 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "protocol:export": "tsx scripts/export-protocol.ts"
   },
   "keywords": [],
   "author": "",

@@ -1,6 +1,7 @@
 export type PlayerCount = 3 | 4;
 export type DeckSize = 40 | 48;
-export type GameMode = 'classic' | 'league';
+export const GAME_MODES = ['classic', 'league'] as const;
+export type GameMode = (typeof GAME_MODES)[number];
 
 /** Die Flags sind Teil des Typs; ihr Verhalten kommt mit den jeweiligen Regelerweiterungen. */
 export interface SpecialRules {

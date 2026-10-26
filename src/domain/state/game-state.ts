@@ -2,11 +2,14 @@ import type { Card } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import { assertSeat, partyCount, type Seat } from '../rules/parties';
 
-export type RoundPhase = 'bidding' | 'dabb' | 'declare' | 'meld' | 'trick' | 'score';
+export const ROUND_PHASES = ['bidding', 'dabb', 'declare', 'meld', 'trick', 'score'] as const;
+export type RoundPhase = (typeof ROUND_PHASES)[number];
 /** 'created': Das Spiel ist angelegt, die erste Runde aber noch nicht ausgeteilt. */
-export type Phase = 'created' | RoundPhase | 'terminated';
+export const PHASES = ['created', ...ROUND_PHASES, 'terminated'] as const;
+export type Phase = (typeof PHASES)[number];
 
-export type AbortReason = 'PLAYER_LEFT';
+export const ABORT_REASONS = ['PLAYER_LEFT'] as const;
+export type AbortReason = (typeof ABORT_REASONS)[number];
 
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
@@ -53,6 +56,12 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
     round: null,
     abortReason: null,
   };
+}
+
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 13–18 hinzu. */
+export function activeSeat(state: GameState): Seat | null {
+  if (state.phase !== 'bidding' || state.round === null) return null;
+  return state.round.bidding.activeSeat;
 }
 
 const PHASE_SUCCESSORS: Readonly<Partial<Record<Phase, RoundPhase>>> = {

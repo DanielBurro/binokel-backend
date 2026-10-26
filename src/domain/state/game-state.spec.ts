@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { buildDeck } from '../cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from '../config/game-config';
-import { createGame, nextPhase, type Phase } from './game-state';
+import { applyIntent } from './apply-intent';
+import { activeSeat, createGame, nextPhase, type GameState, type Phase } from './game-state';
+import { SYSTEM } from './intents';
 
 const config = (playerCount: 3 | 4): GameConfig => ({
   playerCount,
@@ -36,5 +39,28 @@ describe('nextPhase', () => {
 
   it.each<Phase>(['created', 'score', 'terminated'])('kennt keine Folgephase für %s', (phase) => {
     expect(() => nextPhase(withPhase(phase))).toThrow();
+  });
+});
+
+describe('activeSeat', () => {
+  const started = (): GameState => {
+    const result = applyIntent(createGame(config(3), 0), SYSTEM, {
+      type: 'startRound',
+      shuffledDeck: buildDeck(48),
+    });
+    if (!result.ok) throw new Error(`Unerwarteter Fehler ${result.code}`);
+    return result.state;
+  };
+
+  it('nennt beim Reizen den Sitz, der bieten oder passen muss', () => {
+    expect(activeSeat(started())).toBe(2);
+  });
+
+  it.each<Phase>(['created', 'dabb', 'terminated'])('ist in Phase %s niemand', (phase) => {
+    expect(activeSeat({ ...started(), phase })).toBeNull();
+  });
+
+  it('ist ohne Runde niemand', () => {
+    expect(activeSeat({ ...createGame(config(3), 0), phase: 'bidding' })).toBeNull();
   });
 });
