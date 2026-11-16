@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { PlayerView } from '../../../application/projection/player-view';
 import { projectStateFor } from '../../../application/projection/project-state';
 import { makeCard } from '../../../domain/cards/card';
 import { buildDeck } from '../../../domain/cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from '../../../domain/config/game-config';
+import type { Meld } from '../../../domain/melds/meld';
 import { applyIntent } from '../../../domain/state/apply-intent';
 import { createGame, type GameState } from '../../../domain/state/game-state';
 import {
@@ -160,6 +162,95 @@ describe('Server-Events', () => {
         expect(playerViewSchema.parse(view)).toEqual(view);
       }
     }
+  });
+
+  describe('PlayerView der ganzen Runde', () => {
+    const koenig = makeCard('herz', 'koenig', 1);
+    const ober = makeCard('herz', 'ober', 1);
+    const ass = makeCard('eichel', 'ass', 2);
+    const paar: Meld = { id: 'paar-herz-1', kind: 'paar', cards: [koenig, ober], points: 40 };
+    const base = projectStateFor(fullBiddingRound.states[4], 1, seats);
+
+    // Zustände, die die Engine erst mit den Schritten 13–18 erzeugt.
+    const views: [string, PlayerView][] = [
+      [
+        'Dabb aufgenommen',
+        {
+          ...base,
+          phase: 'dabb',
+          dabb: { size: 4, status: 'taken', cards: [koenig, ober, ass, ass] },
+          availableActions: [{ type: 'discardToDabb', count: 4 }],
+        },
+      ],
+      [
+        'Ansage',
+        {
+          ...base,
+          phase: 'declare',
+          dabb: { size: 4, status: 'discarded', cards: null },
+          availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
+        },
+      ],
+      [
+        'Melden',
+        {
+          ...base,
+          phase: 'meld',
+          declaration: { trump: 'herz', mode: 'play' },
+          melds: [null, { melds: [paar], points: 40 }, null],
+          availableActions: [{ type: 'submitMelds', melds: [paar] }],
+        },
+      ],
+      [
+        'Stichspiel',
+        {
+          ...base,
+          phase: 'trick',
+          declaration: { trump: 'herz', mode: 'play' },
+          trick: { plays: [{ seat: 0, card: ass }] },
+          lastTrick: {
+            plays: [
+              { seat: 1, card: koenig },
+              { seat: 2, card: ober },
+              { seat: 0, card: ass },
+            ],
+            winner: 0,
+          },
+          availableActions: [{ type: 'playCard', cardIds: [koenig.id, ober.id] }],
+        },
+      ],
+      [
+        'Abrechnung',
+        {
+          ...base,
+          phase: 'score',
+          roundResult: {
+            outcome: 'failed',
+            parties: [
+              { trickPoints: 120, meldPoints: 0, meldsCounted: true, delta: 120 },
+              { trickPoints: 90, meldPoints: 40, meldsCounted: false, delta: -320 },
+              { trickPoints: 40, meldPoints: 20, meldsCounted: true, delta: 60 },
+            ],
+          },
+          readySeats: [0, 2],
+          scores: [120, -320, 60],
+          availableActions: [{ type: 'readyForNextRound' }],
+        },
+      ],
+      ['Spielende', { ...base, phase: 'terminated', scores: [1010, 400, 1010], winners: [0, 2] }],
+    ];
+
+    it.each(views)('beschreibt die Sicht: %s', (_, view) => {
+      expect(playerViewSchema.parse(view)).toEqual(view);
+    });
+
+    it.each([
+      ['unbekannte Aktion', { availableActions: [{ type: 'cheat' }] }],
+      ['unbekannte Dabb-Lage', { dabb: { size: 4, status: 'open', cards: null } }],
+      ['Ansage ohne Spielart', { declaration: { trump: 'herz' } }],
+    ])('weist ab: %s', (_, change) => {
+      expect(playerViewSchema.safeParse({ ...base, ...change }).success).toBe(false);
+    });
   });
 
   it('beschreibt jedes Ereignis, das die Engine erzeugt', () => {

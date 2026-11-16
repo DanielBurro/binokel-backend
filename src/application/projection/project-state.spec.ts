@@ -65,10 +65,18 @@ describe('projectStateFor', () => {
       forehand: null,
       bidding: null,
       declarer: null,
+      dabb: null,
+      declaration: null,
+      melds: [null, null, null],
+      trick: null,
+      lastTrick: null,
+      roundResult: null,
+      readySeats: [],
       activeSeat: null,
       scores: [0, 0, 0],
       abortReason: null,
-      availableActions: { intents: [], bidRange: null },
+      winners: null,
+      availableActions: [],
     });
   });
 
@@ -88,17 +96,44 @@ describe('projectStateFor', () => {
     expect(view.seats.map((seat) => seat.handSize)).toEqual([12, 12, 12]);
   });
 
+  it('zeigt vom Dabb nur Größe und Lage, nie die Karten', () => {
+    const bidding = started(config);
+    const decided = play(bidding, [2, { type: 'pass' }], [0, { type: 'pass' }]);
+
+    for (const state of [bidding, decided]) {
+      for (const seat of [0, 1, 2]) {
+        expect(projectStateFor(state, seat, seats).dabb).toEqual({
+          size: 4,
+          status: 'table',
+          cards: null,
+        });
+      }
+    }
+    expect(projectStateFor(started(configFor(3, 48)), 0, seats).dabb?.size).toBe(3);
+  });
+
+  it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
+    const state = play(started(configFor(4, 48)), [2, { type: 'pass' }]);
+
+    expect(projectStateFor(state, 3, seatsFor(4))).toMatchObject({
+      declaration: null,
+      melds: [null, null, null, null],
+      trick: null,
+      lastTrick: null,
+      roundResult: null,
+      readySeats: [],
+      winners: null,
+    });
+  });
+
   it('bietet nur dem Sitz am Zug Gebot und Passen an', () => {
     const state = play(started(config), [2, { type: 'bid', amount: 160 }]);
 
-    expect(projectStateFor(state, 0, seats).availableActions).toEqual({
-      intents: ['bid', 'pass'],
-      bidRange: { min: 170, max: MAX_BID, step: BID_STEP },
-    });
-    expect(projectStateFor(state, 1, seats).availableActions).toEqual({
-      intents: [],
-      bidRange: null,
-    });
+    expect(projectStateFor(state, 0, seats).availableActions).toEqual([
+      { type: 'bid', min: 170, max: MAX_BID, step: BID_STEP },
+      { type: 'pass' },
+    ]);
+    expect(projectStateFor(state, 1, seats).availableActions).toEqual([]);
   });
 
   it('zeigt nach dem Reizen den Spielmacher und bietet keine Gebote mehr an', () => {
@@ -110,7 +145,7 @@ describe('projectStateFor', () => {
       declarer: 1,
       activeSeat: null,
       bidding: { highestBid: OPENING_BID, highestBidder: 1, passed: [2, 0] },
-      availableActions: { intents: [], bidRange: null },
+      availableActions: [],
     });
   });
 
@@ -122,7 +157,7 @@ describe('projectStateFor', () => {
       phase: 'terminated',
       abortReason: 'PLAYER_LEFT',
       activeSeat: null,
-      availableActions: { intents: [], bidRange: null },
+      availableActions: [],
     });
   });
 
