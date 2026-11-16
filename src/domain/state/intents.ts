@@ -21,6 +21,23 @@ export type PlayerIntent =
   | { readonly type: 'playCard'; readonly cardId: CardId }
   | { readonly type: 'readyForNextRound' };
 
+/**
+ * Erlaubter Zug eines Sitzes samt Spielraum, siehe `legalIntents`. Enthält nur, was der Sitz
+ * selbst wissen darf, und geht deshalb unverändert als `availableActions` an seinen Client.
+ */
+export type LegalIntent =
+  | { readonly type: 'bid'; readonly min: number; readonly max: number; readonly step: number }
+  | { readonly type: 'pass' }
+  | { readonly type: 'takeDabb' }
+  /** `count` Karten der eigenen Hand sind zu drücken. */
+  | { readonly type: 'discardToDabb'; readonly count: number }
+  | { readonly type: 'declare'; readonly modes: readonly DeclareMode[] }
+  /** Meldungen, aus denen `submitMelds` auswählen darf. */
+  | { readonly type: 'submitMelds'; readonly melds: readonly Meld[] }
+  /** Karten der eigenen Hand, die Farb-, Stich- und Trumpfzwang erlauben. */
+  | { readonly type: 'playCard'; readonly cardIds: readonly CardId[] }
+  | { readonly type: 'readyForNextRound' };
+
 /** Erzeugt nur der GameService; so kommt der Zufall des Mischens von außen in die reine Engine. */
 export type SystemIntent =
   | { readonly type: 'startRound'; readonly shuffledDeck: readonly Card[] }
