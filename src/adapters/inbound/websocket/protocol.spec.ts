@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PlayerView } from '../../../application/projection/player-view';
 import { projectStateFor } from '../../../application/projection/project-state';
@@ -333,5 +335,14 @@ describe('protocolJsonSchema', () => {
 
   it('ist als JSON serialisierbar', () => {
     expect(() => JSON.parse(JSON.stringify(exported))).not.toThrow();
+  });
+
+  it('stimmt mit der eingecheckten Schema-Datei überein', () => {
+    // Schlägt das fehl: `npm run protocol:export` ausführen und die Datei mit einchecken.
+    const committed: unknown = JSON.parse(
+      readFileSync(join(process.cwd(), 'protocol', 'protocol.schema.json'), 'utf8'),
+    );
+
+    expect(committed).toEqual(JSON.parse(JSON.stringify(exported)));
   });
 });

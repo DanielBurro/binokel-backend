@@ -1,3 +1,5 @@
 node_modules
 dist
 coverage
+# Erzeugt von `npm run protocol:export`
+protocol

@@ -1,0 +1,1718 @@
+{
+  "clientEvents": {
+    "room:create": {
+      "payload": "CreateRoomPayload",
+      "ack": "RoomJoinedAck"
+    },
+    "room:join": {
+      "payload": "JoinRoomPayload",
+      "ack": "RoomJoinedAck"
+    },
+    "room:leave": {
+      "payload": "LeaveRoomPayload",
+      "ack": "LeaveRoomAck"
+    },
+    "session:resume": {
+      "payload": "ResumeSessionPayload",
+      "ack": "SessionResumedAck"
+    },
+    "game:intent": {
+      "payload": "IntentPayload",
+      "ack": "IntentAck"
+    }
+  },
+  "serverEvents": {
+    "room:state": {
+      "payload": "RoomView"
+    },
+    "game:state": {
+      "payload": "PlayerView"
+    },
+    "game:events": {
+      "payload": "GameEvents"
+    }
+  },
+  "clientSchemas": {
+    "schemas": {
+      "SpecialRules": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "halbeStrafe": {
+            "default": false,
+            "type": "boolean"
+          },
+          "trumpfStichzwang": {
+            "default": false,
+            "type": "boolean"
+          },
+          "durch": {
+            "default": false,
+            "type": "boolean"
+          },
+          "untendurch": {
+            "default": false,
+            "type": "boolean"
+          },
+          "rufen": {
+            "default": false,
+            "type": "boolean"
+          },
+          "keinDabb": {
+            "default": false,
+            "type": "boolean"
+          },
+          "tauschen": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "GameConfig": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "playerCount": {
+            "type": "number",
+            "enum": [
+              3,
+              4
+            ]
+          },
+          "deckSize": {
+            "type": "number",
+            "enum": [
+              40,
+              48
+            ]
+          },
+          "specialRules": {
+            "default": {},
+            "$ref": "SpecialRules"
+          },
+          "mode": {
+            "default": "classic",
+            "type": "string",
+            "enum": [
+              "classic",
+              "league"
+            ]
+          }
+        },
+        "required": [
+          "playerCount",
+          "deckSize"
+        ],
+        "additionalProperties": false
+      },
+      "PlayerIntent": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "bid"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "amount"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "pass"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "takeDabb"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "discardToDabb"
+              },
+              "cardIds": {
+                "maxItems": 48,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                }
+              }
+            },
+            "required": [
+              "type",
+              "cardIds"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "declare"
+              },
+              "trump": {
+                "type": "string",
+                "enum": [
+                  "eichel",
+                  "gruen",
+                  "herz",
+                  "schellen"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "play",
+                  "abgehen"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "trump",
+              "mode"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "submitMelds"
+              },
+              "meldIds": {
+                "maxItems": 48,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              }
+            },
+            "required": [
+              "type",
+              "meldIds"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "playCard"
+              },
+              "cardId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              }
+            },
+            "required": [
+              "type",
+              "cardId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "readyForNextRound"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CreateRoomPayload": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24
+          },
+          "config": {
+            "$ref": "GameConfig"
+          }
+        },
+        "required": [
+          "displayName",
+          "config"
+        ],
+        "additionalProperties": false
+      },
+      "JoinRoomPayload": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24
+          }
+        },
+        "required": [
+          "roomId",
+          "displayName"
+        ],
+        "additionalProperties": false
+      },
+      "ResumeSessionPayload": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "additionalProperties": false
+      },
+      "LeaveRoomPayload": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "IntentPayload": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "expectedVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "intent": {
+            "$ref": "PlayerIntent"
+          }
+        },
+        "required": [
+          "expectedVersion",
+          "intent"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "serverSchemas": {
+    "schemas": {
+      "SpecialRules": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "halbeStrafe": {
+            "default": false,
+            "type": "boolean"
+          },
+          "trumpfStichzwang": {
+            "default": false,
+            "type": "boolean"
+          },
+          "durch": {
+            "default": false,
+            "type": "boolean"
+          },
+          "untendurch": {
+            "default": false,
+            "type": "boolean"
+          },
+          "rufen": {
+            "default": false,
+            "type": "boolean"
+          },
+          "keinDabb": {
+            "default": false,
+            "type": "boolean"
+          },
+          "tauschen": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "halbeStrafe",
+          "trumpfStichzwang",
+          "durch",
+          "untendurch",
+          "rufen",
+          "keinDabb",
+          "tauschen"
+        ],
+        "additionalProperties": false
+      },
+      "GameConfig": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "playerCount": {
+            "type": "number",
+            "enum": [
+              3,
+              4
+            ]
+          },
+          "deckSize": {
+            "type": "number",
+            "enum": [
+              40,
+              48
+            ]
+          },
+          "specialRules": {
+            "$ref": "SpecialRules"
+          },
+          "mode": {
+            "default": "classic",
+            "type": "string",
+            "enum": [
+              "classic",
+              "league"
+            ]
+          }
+        },
+        "required": [
+          "playerCount",
+          "deckSize",
+          "specialRules",
+          "mode"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorAck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "INVALID_ACTOR",
+                  "WRONG_PHASE",
+                  "NOT_YOUR_TURN",
+                  "BID_TOO_LOW",
+                  "BID_NOT_IN_STEPS",
+                  "BID_ABOVE_LIMIT",
+                  "INVALID_DECK",
+                  "STALE_STATE",
+                  "INVALID_PAYLOAD",
+                  "INVALID_CONFIG",
+                  "ROOM_NOT_FOUND",
+                  "ROOM_FULL",
+                  "SESSION_NOT_FOUND",
+                  "NOT_IN_ROOM",
+                  "RATE_LIMITED",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RoomJoinedAck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "const": true
+              },
+              "roomId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "sessionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "ok",
+              "roomId",
+              "seat",
+              "sessionId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "ErrorAck"
+          }
+        ]
+      },
+      "SessionResumedAck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "const": true
+              },
+              "roomId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "ok",
+              "roomId",
+              "seat"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "ErrorAck"
+          }
+        ]
+      },
+      "IntentAck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "const": true
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "ok",
+              "version"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "ErrorAck"
+          }
+        ]
+      },
+      "LeaveRoomAck": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "ok"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "ErrorAck"
+          }
+        ]
+      },
+      "Card": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "suit": {
+            "type": "string",
+            "enum": [
+              "eichel",
+              "gruen",
+              "herz",
+              "schellen"
+            ]
+          },
+          "rank": {
+            "type": "string",
+            "enum": [
+              "ass",
+              "zehn",
+              "koenig",
+              "ober",
+              "unter",
+              "sieben"
+            ]
+          },
+          "copy": {
+            "type": "number",
+            "enum": [
+              1,
+              2
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "suit",
+          "rank",
+          "copy"
+        ],
+        "additionalProperties": false
+      },
+      "Meld": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "paar",
+              "familie",
+              "doppelteFamilie",
+              "binokel",
+              "doppelBinokel",
+              "vierGleiche",
+              "achtGleiche",
+              "diss"
+            ]
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "Card"
+            }
+          },
+          "points": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "cards",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "RoomView": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "config": {
+            "$ref": "GameConfig"
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "displayName",
+                    "connected"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "roomId",
+          "config",
+          "seats"
+        ],
+        "additionalProperties": false
+      },
+      "AvailableAction": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "bid"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "max": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "min",
+              "max",
+              "step"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "pass"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "takeDabb"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "discardToDabb"
+              },
+              "count": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "count"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "declare"
+              },
+              "modes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "play",
+                    "abgehen"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "type",
+              "modes"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "submitMelds"
+              },
+              "melds": {
+                "type": "array",
+                "items": {
+                  "$ref": "Meld"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "melds"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "playCard"
+              },
+              "cardIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "cardIds"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "readyForNextRound"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "PlayerView": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "created",
+              "bidding",
+              "dabb",
+              "declare",
+              "meld",
+              "trick",
+              "score",
+              "terminated"
+            ]
+          },
+          "config": {
+            "$ref": "GameConfig"
+          },
+          "ownSeat": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "displayName": {
+                  "type": "string"
+                },
+                "connected": {
+                  "type": "boolean"
+                },
+                "seat": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "party": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "handSize": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "displayName",
+                "connected",
+                "seat",
+                "party",
+                "handSize"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "hand": {
+            "type": "array",
+            "items": {
+              "$ref": "Card"
+            }
+          },
+          "dealer": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "forehand": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bidding": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "highestBid": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "highestBidder": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "passed": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "required": [
+                  "highestBid",
+                  "highestBidder",
+                  "passed"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "declarer": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dabb": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "table",
+                      "taken",
+                      "discarded"
+                    ]
+                  },
+                  "cards": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "Card"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "size",
+                  "status",
+                  "cards"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "declaration": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "trump": {
+                    "type": "string",
+                    "enum": [
+                      "eichel",
+                      "gruen",
+                      "herz",
+                      "schellen"
+                    ]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "play",
+                      "abgehen"
+                    ]
+                  }
+                },
+                "required": [
+                  "trump",
+                  "mode"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "melds": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "melds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "Meld"
+                      }
+                    },
+                    "points": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "melds",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "trick": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "plays": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "seat": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "card": {
+                          "$ref": "Card"
+                        }
+                      },
+                      "required": [
+                        "seat",
+                        "card"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "plays"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastTrick": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "plays": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "seat": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "card": {
+                          "$ref": "Card"
+                        }
+                      },
+                      "required": [
+                        "seat",
+                        "card"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "winner": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "plays",
+                  "winner"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "roundResult": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "made",
+                      "failed",
+                      "abgehen"
+                    ]
+                  },
+                  "parties": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "trickPoints": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "meldPoints": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "meldsCounted": {
+                          "type": "boolean"
+                        },
+                        "delta": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "trickPoints",
+                        "meldPoints",
+                        "meldsCounted",
+                        "delta"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "outcome",
+                  "parties"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readySeats": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "activeSeat": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "abortReason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "PLAYER_LEFT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "winners": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableActions": {
+            "type": "array",
+            "items": {
+              "$ref": "AvailableAction"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "phase",
+          "config",
+          "ownSeat",
+          "seats",
+          "hand",
+          "dealer",
+          "forehand",
+          "bidding",
+          "declarer",
+          "dabb",
+          "declaration",
+          "melds",
+          "trick",
+          "lastTrick",
+          "roundResult",
+          "readySeats",
+          "activeSeat",
+          "scores",
+          "abortReason",
+          "winners",
+          "availableActions"
+        ],
+        "additionalProperties": false
+      },
+      "GameEvent": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "roundStarted"
+              },
+              "dealer": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "forehand": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "dealer",
+              "forehand"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "bidPlaced"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat",
+              "amount"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "passed"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "biddingWon"
+              },
+              "declarer": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "bid": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "declarer",
+              "bid"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "dabbTaken"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "dabbDiscarded"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "declared"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "trump": {
+                "type": "string",
+                "enum": [
+                  "eichel",
+                  "gruen",
+                  "herz",
+                  "schellen"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "play",
+                  "abgehen"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "seat",
+              "trump",
+              "mode"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "meldsSubmitted"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "melds": {
+                "type": "array",
+                "items": {
+                  "$ref": "Meld"
+                }
+              },
+              "points": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat",
+              "melds",
+              "points"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cardPlayed"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "card": {
+                "$ref": "Card"
+              }
+            },
+            "required": [
+              "type",
+              "seat",
+              "card"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "trickWon"
+              },
+              "winner": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "winner"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "roundScored"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "made",
+                  "failed",
+                  "abgehen"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "outcome"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "playerReady"
+              },
+              "seat": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "seat"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "gameFinished"
+              },
+              "winners": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            },
+            "required": [
+              "type",
+              "winners"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "gameAborted"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "PLAYER_LEFT"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "GameEvents": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "GameEvent"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "events"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
