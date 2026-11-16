@@ -11,6 +11,14 @@ export type Phase = (typeof PHASES)[number];
 export const ABORT_REASONS = ['PLAYER_LEFT'] as const;
 export type AbortReason = (typeof ABORT_REASONS)[number];
 
+/** 'play': Der Spielmacher spielt die Runde aus; 'abgehen': Er gibt sie vor dem Stichspiel auf. */
+export const DECLARE_MODES = ['play', 'abgehen'] as const;
+export type DeclareMode = (typeof DECLARE_MODES)[number];
+
+/** 'made': Reizwert erreicht; 'failed': verfehlt; 'abgehen': Die Runde wurde nicht ausgespielt. */
+export const ROUND_OUTCOMES = ['made', 'failed', 'abgehen'] as const;
+export type RoundOutcome = (typeof ROUND_OUTCOMES)[number];
+
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
   readonly highestBid: number;
