@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import type { GameEventBatch } from '../../../application/ports/outbound/game-broadcaster.port';
-import { DABB_STATUSES, type PlayerView } from '../../../application/projection/player-view';
+import type { PlayerView } from '../../../application/projection/player-view';
 import type { RoomView } from '../../../application/projection/room-view';
 import { RANKS, SUITS, type Card } from '../../../domain/cards/card';
 import { GAME_MODES, type GameConfig, type SpecialRules } from '../../../domain/config/game-config';
 import { MELD_KINDS, type Meld } from '../../../domain/melds/meld';
 import {
   ABORT_REASONS,
+  DABB_STATUSES,
   DECLARE_MODES,
   PHASES,
   ROUND_OUTCOMES,
@@ -94,7 +95,7 @@ const gameConfigSchema = shared(
   }) satisfies z.ZodType<GameConfig>,
 );
 
-/** Alle Züge einer Runde; die Engine setzt bisher `bid` und `pass` um (Schritte 13–18). */
+/** Alle Züge einer Runde; die Engine setzt bisher Reizen und Dabb um (Schritte 14–18). */
 const playerIntentSchema = client(
   'PlayerIntent',
   exhaustive<PlayerIntent>()(
@@ -243,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `declaration` füllen die Schritte 13–18. */
+/** Auf die ganze Runde ausgelegt; die Felder ab `declaration` füllen die Schritte 14–18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

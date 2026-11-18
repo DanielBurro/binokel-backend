@@ -7,8 +7,8 @@ export const SYSTEM = 'system';
 export type Actor = Seat | typeof SYSTEM;
 
 /**
- * Alle Spielerzüge einer Runde. Die Engine setzt bisher `bid` und `pass` um, die übrigen
- * folgen mit den Schritten 13–18 und werden bis dahin abgelehnt.
+ * Alle Spielerzüge einer Runde. Die Engine setzt bisher Reizen und Dabb um, die übrigen
+ * folgen mit den Schritten 14–18 und werden bis dahin abgelehnt.
  */
 export type PlayerIntent =
   | { readonly type: 'bid'; readonly amount: number }
@@ -80,6 +80,11 @@ export const INTENT_ERROR_CODES = [
   'BID_NOT_IN_STEPS',
   'BID_ABOVE_LIMIT',
   'INVALID_DECK',
+  'DABB_ALREADY_TAKEN',
+  'DABB_NOT_TAKEN',
+  'WRONG_DISCARD_COUNT',
+  'DUPLICATE_CARDS',
+  'CARD_NOT_IN_HAND',
 ] as const;
 export type IntentErrorCode = (typeof INTENT_ERROR_CODES)[number];
 

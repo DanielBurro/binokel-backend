@@ -96,7 +96,7 @@ describe('projectStateFor', () => {
     expect(view.seats.map((seat) => seat.handSize)).toEqual([12, 12, 12]);
   });
 
-  it('zeigt vom Dabb nur Größe und Lage, nie die Karten', () => {
+  it('zeigt beim Reizen allen nur Größe und Lage des Dabbs', () => {
     const bidding = started(config);
     const decided = play(bidding, [2, { type: 'pass' }], [0, { type: 'pass' }]);
 
@@ -110,6 +110,58 @@ describe('projectStateFor', () => {
       }
     }
     expect(projectStateFor(started(configFor(3, 48)), 0, seats).dabb?.size).toBe(3);
+  });
+
+  describe('Dabb nach der Aufnahme (nur für den Spielmacher)', () => {
+    // Sitz 1 wird Spielmacher und nimmt auf.
+    const taken = () =>
+      play(
+        started(config),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+
+    it('zeigt dem Spielmacher die aufgenommenen Karten, den anderen nicht', () => {
+      const state = taken();
+
+      expect(projectStateFor(state, 1, seats)).toMatchObject({
+        dabb: { size: 4, status: 'taken', cards: state.round!.dabb },
+        availableActions: [{ type: 'discardToDabb', count: 4 }],
+      });
+      expect(projectStateFor(state, 1, seats).hand).toHaveLength(16);
+      for (const seat of [0, 2]) {
+        expect(projectStateFor(state, seat, seats).dabb).toEqual({
+          size: 4,
+          status: 'taken',
+          cards: null,
+        });
+        expect(projectStateFor(state, seat, seats).seats[1].handSize).toBe(16);
+      }
+    });
+
+    it('zeigt dem Spielmacher nach dem Drücken die gedrückten Karten, den anderen nicht', () => {
+      const before = taken();
+      const pressed = before.round!.hands[1].slice(-4);
+      const state = play(before, [
+        1,
+        { type: 'discardToDabb', cardIds: pressed.map((card) => card.id) },
+      ]);
+
+      expect(projectStateFor(state, 1, seats)).toMatchObject({
+        phase: 'declare',
+        dabb: { size: 4, status: 'discarded', cards: pressed },
+        activeSeat: null,
+        availableActions: [],
+      });
+      for (const seat of [0, 2]) {
+        expect(projectStateFor(state, seat, seats).dabb).toEqual({
+          size: 4,
+          status: 'discarded',
+          cards: null,
+        });
+      }
+    });
   });
 
   it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
@@ -136,17 +188,18 @@ describe('projectStateFor', () => {
     expect(projectStateFor(state, 1, seats).availableActions).toEqual([]);
   });
 
-  it('zeigt nach dem Reizen den Spielmacher und bietet keine Gebote mehr an', () => {
+  it('zeigt nach dem Reizen den Spielmacher und bietet nur ihm den Dabb an', () => {
     const state = play(started(config), [2, { type: 'pass' }], [0, { type: 'pass' }]);
     const view = projectStateFor(state, 1, seats);
 
     expect(view).toMatchObject({
       phase: 'dabb',
       declarer: 1,
-      activeSeat: null,
+      activeSeat: 1,
       bidding: { highestBid: OPENING_BID, highestBidder: 1, passed: [2, 0] },
-      availableActions: [],
+      availableActions: [{ type: 'takeDabb' }],
     });
+    expect(projectStateFor(state, 0, seats).availableActions).toEqual([]);
   });
 
   it('zeigt nach einem Abbruch den Grund', () => {
@@ -186,28 +239,47 @@ describe('projectStateFor', () => {
       [4, 48],
     ];
 
+    /** Was der Sitz sehen darf: eigene Hand, als Spielmacher dazu den aufgenommenen Dabb. */
+    function visibleTo(state: GameState, seat: Seat): Set<string> {
+      const { hands, dabb, discarded, dabbStatus, declarer } = state.round!;
+      const own = [...hands[seat]];
+      if (seat === declarer && dabbStatus !== 'table') own.push(...dabb, ...discarded);
+      return new Set(own.map((card) => card.id));
+    }
+
     it.each(configs)(
       'verrät bei %i Spielern und %i Karten weder Dabb noch fremde Hände',
       (n, d) => {
         const leakConfig = configFor(n, d);
         const begun = started(leakConfig);
+        // Sitz 2 bietet 1000 und wird Spielmacher, nimmt auf und drückt.
+        const decided = play(begun, [2, { type: 'bid', amount: MAX_BID }]);
+        const taken = play(decided, [2, { type: 'takeDabb' }]);
+        const discarded = play(taken, [
+          2,
+          {
+            type: 'discardToDabb',
+            cardIds: taken.round!.hands[2].slice(0, taken.round!.dabb.length).map((c) => c.id),
+          },
+        ]);
         const states = [
           begun,
           play(begun, [2, { type: 'bid', amount: OPENING_BID + BID_STEP }]),
-          play(begun, [SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }]),
+          decided,
+          taken,
+          discarded,
+          play(taken, [SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }]),
         ];
 
         for (const state of states) {
-          const { hands, dabb } = state.round!;
           for (let seat: Seat = 0; seat < n; seat++) {
             const json = JSON.stringify(projectStateFor(state, seat, seatsFor(n)));
-            const hidden = [...dabb, ...hands.filter((_, other) => other !== seat).flat()];
+            const visible = visibleTo(state, seat);
 
-            expect(dabb.length).toBeGreaterThan(0);
-            for (const card of hidden) {
-              expect(json).not.toContain(`"${card.id}"`);
+            for (const card of buildDeck(d)) {
+              if (!visible.has(card.id)) expect(json).not.toContain(`"${card.id}"`);
             }
-            for (const card of hands[seat]) {
+            for (const card of state.round!.hands[seat]) {
               expect(json).toContain(`"${card.id}"`);
             }
           }

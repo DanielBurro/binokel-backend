@@ -4,6 +4,7 @@ import type { DeckSize } from '../config/game-config';
 import { deal, forehandOf } from '../rules/deal';
 import { isSeat, type Seat } from '../rules/parties';
 import { bid, openBidding, pass } from './bidding';
+import { discardToDabb, takeDabb } from './dabb';
 import { nextPhase, type AbortReason, type GameState } from './game-state';
 import {
   SYSTEM,
@@ -48,10 +49,33 @@ function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): 
     case 'bid':
     case 'pass':
       return applyBidding(state, seat, intent);
-    // Die Regeln der übrigen Phasen folgen mit den Schritten 13–18.
+    case 'takeDabb':
+    case 'discardToDabb':
+      return applyDabb(state, seat, intent);
+    // Die Regeln der übrigen Phasen folgen mit den Schritten 14–18.
     default:
       return fail('WRONG_PHASE');
   }
+}
+
+function applyDabb(
+  state: GameState,
+  seat: Seat,
+  intent: Extract<PlayerIntent, { type: 'takeDabb' | 'discardToDabb' }>,
+): IntentResult {
+  const { round } = state;
+  if (state.phase !== 'dabb' || round === null) return fail('WRONG_PHASE');
+
+  const result =
+    intent.type === 'takeDabb' ? takeDabb(round, seat) : discardToDabb(round, seat, intent.cardIds);
+  if (!result.ok) return result;
+
+  const done = result.round.dabbStatus === 'discarded';
+  return commit(
+    state,
+    { phase: done ? nextPhase(state) : state.phase, round: result.round },
+    result.events,
+  );
 }
 
 function applyBidding(
@@ -101,6 +125,8 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
         forehand,
         hands,
         dabb,
+        dabbStatus: 'table',
+        discarded: [],
         bidding: openBidding(forehand, config.playerCount),
         declarer: null,
       },
