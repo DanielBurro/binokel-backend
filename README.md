@@ -67,7 +67,8 @@ Client und Server sprechen über Socket.IO. Der Vertrag steht in [`protocol.ts`]
 - Jede Client-Nachricht wird mit `{ ok: true, … }` oder `{ ok: false, error: { code, message } }` beantwortet.
 - `availableActions` in der `PlayerView` listet die Züge, die der Sitz gerade ausführen darf, samt Spielraum (zum Beispiel den Gebotsbereich). Der Client muss die Regeln nicht nachbauen.
 - Jeder Zug trägt die `version` der Sicht, auf der er beruht. Ist sie veraltet, antwortet der Server mit `STALE_STATE`.
-- Das Protokoll beschreibt bereits die ganze Runde. Der Server setzt bisher den Weg bis zum Ende des Reizens um: Die Züge `takeDabb`, `discardToDabb`, `declare`, `submitMelds`, `playCard` und `readyForNextRound` werden noch abgelehnt, und die Felder `declaration`, `melds`, `trick`, `lastTrick`, `roundResult`, `readySeats` und `winners` bleiben leer.
+- Den Dabb sieht nur der Spielmacher, und erst nach der Aufnahme: `dabb.cards` enthält für ihn bei `status: 'taken'` die aufgenommenen und bei `'discarded'` die gedrückten Karten. Alle anderen Sitze, auch der Partner, bekommen nur `size` und `status`.
+- Das Protokoll beschreibt bereits die ganze Runde. Der Server setzt bisher den Weg bis zum Drücken des Dabbs um: Die Züge `declare`, `submitMelds`, `playCard` und `readyForNextRound` werden noch abgelehnt, und die Felder `declaration`, `melds`, `trick`, `lastTrick`, `roundResult`, `readySeats` und `winners` bleiben leer.
 
 ## Git Commit-Konventionen
 
