@@ -30,3 +30,17 @@ jobs:
       - run: npm run build
       # Schwelle aus vitest.config.mts (NFA-09)
       - run: npm run test:coverage
+
+  docker:
+    name: Docker-Image und Health-Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # --wait kehrt erst zurück, wenn der HEALTHCHECK des Images "healthy" meldet (NFA-05).
+      - run: docker compose up --build --wait --wait-timeout 60
+      - run: curl --fail --silent --show-error http://localhost:3000/health
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down
