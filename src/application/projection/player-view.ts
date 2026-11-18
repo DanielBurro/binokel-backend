@@ -33,7 +33,10 @@ export interface DabbView {
   /** Anzahl der Karten im Dabb bzw. der gedrückten Karten. */
   readonly size: number;
   readonly status: DabbStatus;
-  /** Die Karten, soweit dieser Sitz sie sehen darf, sonst null. */
+  /**
+   * Nur für den Spielmacher und erst nach der Aufnahme: bei 'taken' die aufgenommenen, bei
+   * 'discarded' die gedrückten Karten. Für alle anderen Sitze immer null.
+   */
   readonly cards: readonly Card[] | null;
 }
 
@@ -80,8 +83,8 @@ export interface RoundResultView {
 
 /**
  * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05), ausgelegt auf die
- * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, der Dabb nur, soweit der Sitz ihn
- * sehen darf. Die Felder ab `declaration` füllen die Schritte 13–18.
+ * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, die Dabb-Karten nur für den
+ * Spielmacher nach der Aufnahme. Die Felder ab `declaration` füllen die Schritte 14–18.
  */
 export interface PlayerView {
   readonly version: number;
