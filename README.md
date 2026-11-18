@@ -61,3 +61,23 @@ Alle Commit-Nachrichten folgen der Spezifikation der [Conventional Commits](http
 | **`ci`**       | CI/CD           | Anpassung von CI/CD-Pipelines und Automatisierungen (z. B. GitHub Actions) |
 | **`build`**    | Build-System    | Änderungen, die das Build-System oder externe Abhängigkeiten betreffen     |
 | **`revert`**   | Rücknahme       | Macht einen vorherigen Commit rückgängig                                   |
+
+## Betrieb mit Docker
+
+Voraussetzung: Docker mit Compose v2. Node muss dafür nicht installiert sein.
+
+```bash
+docker compose up --build -d   # Image bauen und Server im Hintergrund starten (Port 3000)
+docker compose ps              # Status, "healthy" sobald GET /health antwortet
+docker compose logs -f         # Logs verfolgen
+docker compose down            # Server stoppen
+```
+
+- Das Image läuft mit Node 22 als Benutzer `node` und enthält nur Laufzeitabhängigkeiten und den kompilierten Code.
+- `docker compose` setzt `NODE_ENV=production`. Ohne `CORS_ORIGIN` sind dann keine Browser-Origins erlaubt. Native Apps senden keinen Origin und sind nicht betroffen. Für ein Web-Frontend im Browser: `CORS_ORIGIN='*' docker compose up --build`.
+- Port und Umgebungsvariablen lassen sich über die Shell oder eine `.env`-Datei neben `docker-compose.yml` überschreiben, z. B. `HOST_PORT=8080`.
+- Die CI baut das Image in jedem Pull Request und prüft den Health-Check.
+
+### Health-Check
+
+`GET /health` antwortet mit `200` und `{ "status": "ok", "uptimeSeconds": 42 }`, solange der Prozess läuft. Docker prüft den Endpunkt alle 30 Sekunden (`HEALTHCHECK` im [`Dockerfile`](Dockerfile)) und meldet den Container nach drei Fehlschlägen in Folge als `unhealthy`.
