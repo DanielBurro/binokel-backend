@@ -1,8 +1,9 @@
-import type { Card } from '../../domain/cards/card';
+import type { Card, Suit } from '../../domain/cards/card';
 import type { GameConfig } from '../../domain/config/game-config';
+import type { Meld } from '../../domain/melds/meld';
 import type { PartyId, Seat } from '../../domain/rules/parties';
-import type { AbortReason, Phase } from '../../domain/state/game-state';
-import type { PlayerIntent } from '../../domain/state/intents';
+import type { AbortReason, DeclareMode, Phase, RoundOutcome } from '../../domain/state/game-state';
+import type { LegalIntent } from '../../domain/state/intents';
 
 /** Sitzungsdaten eines Sitzes; kommen vom Raum, damit der GameState frei davon bleibt. */
 export interface SeatInfo {
@@ -22,23 +23,66 @@ export interface BiddingView {
   readonly passed: readonly Seat[];
 }
 
-export type PlayerIntentType = PlayerIntent['type'];
+/**
+ * 'table': liegt verdeckt in der Mitte; 'taken': beim Spielmacher auf der Hand;
+ * 'discarded': Der Spielmacher hat gedrückt.
+ */
+export const DABB_STATUSES = ['table', 'taken', 'discarded'] as const;
+export type DabbStatus = (typeof DABB_STATUSES)[number];
 
-export interface BidRange {
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
+export interface DabbView {
+  /** Anzahl der Karten im Dabb bzw. der gedrückten Karten. */
+  readonly size: number;
+  readonly status: DabbStatus;
+  /** Die Karten, soweit dieser Sitz sie sehen darf, sonst null. */
+  readonly cards: readonly Card[] | null;
 }
 
-export interface AvailableActions {
-  readonly intents: readonly PlayerIntentType[];
-  /** Nur gesetzt, wenn `bid` erlaubt ist. */
-  readonly bidRange: BidRange | null;
+export interface DeclarationView {
+  readonly trump: Suit;
+  readonly mode: DeclareMode;
+}
+
+/** Gemeldete Karten und Punkte eines Sitzes sind öffentlich. */
+export interface SeatMeldsView {
+  readonly melds: readonly Meld[];
+  readonly points: number;
+}
+
+export interface TrickPlayView {
+  readonly seat: Seat;
+  readonly card: Card;
+}
+
+/** Laufender Stich in Ausspielreihenfolge. */
+export interface TrickView {
+  readonly plays: readonly TrickPlayView[];
+}
+
+export interface CompletedTrickView extends TrickView {
+  readonly winner: Seat;
+}
+
+export interface PartyResultView {
+  /** Gerundete Stichpunkte, inklusive letztem Stich und gedrückten Augen. */
+  readonly trickPoints: number;
+  readonly meldPoints: number;
+  /** false, wenn die Meldepunkte verfallen sind. */
+  readonly meldsCounted: boolean;
+  /** Veränderung des Punktestands durch diese Runde; kann negativ sein. */
+  readonly delta: number;
+}
+
+export interface RoundResultView {
+  readonly outcome: RoundOutcome;
+  /** Nach Partei indiziert. */
+  readonly parties: readonly PartyResultView[];
 }
 
 /**
- * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05).
- * Whitelist: Dabb und fremde Hände sind nie enthalten.
+ * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05), ausgelegt auf die
+ * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, der Dabb nur, soweit der Sitz ihn
+ * sehen darf. Die Felder ab `declaration` füllen die Schritte 13–18.
  */
 export interface PlayerView {
   readonly version: number;
@@ -52,9 +96,25 @@ export interface PlayerView {
   readonly forehand: Seat | null;
   readonly bidding: BiddingView | null;
   readonly declarer: Seat | null;
+  /** null bis zur ersten Runde. */
+  readonly dabb: DabbView | null;
+  /** Trumpf und Spielart; null bis zur Ansage. */
+  readonly declaration: DeclarationView | null;
+  /** Nach Sitz indiziert; null, solange der Sitz nicht gemeldet hat. */
+  readonly melds: readonly (SeatMeldsView | null)[];
+  /** null außerhalb des Stichspiels. */
+  readonly trick: TrickView | null;
+  readonly lastTrick: CompletedTrickView | null;
+  /** Aufschlüsselung der Runde; null bis zur Abrechnung. */
+  readonly roundResult: RoundResultView | null;
+  /** Sitze, die nach der Abrechnung die nächste Runde bestätigt haben. */
+  readonly readySeats: readonly Seat[];
   readonly activeSeat: Seat | null;
   /** Nach Partei indiziert. */
   readonly scores: readonly number[];
   readonly abortReason: AbortReason | null;
-  readonly availableActions: AvailableActions;
+  /** Siegerparteien nach regulärem Spielende; bei Punktgleichheit mehrere. */
+  readonly winners: readonly PartyId[] | null;
+  /** Erlaubte Züge dieses Sitzes samt Spielraum; leer, wenn er nicht am Zug ist. */
+  readonly availableActions: readonly LegalIntent[];
 }

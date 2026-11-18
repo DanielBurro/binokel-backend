@@ -1,10 +1,8 @@
 import type { Card } from '../../domain/cards/card';
 import { assertSeat, partyOf, type Seat } from '../../domain/rules/parties';
-import { BID_STEP, MAX_BID, minimumBid } from '../../domain/state/bidding';
 import { activeSeat, type GameState } from '../../domain/state/game-state';
-import type { AvailableActions, PlayerView, SeatInfo } from './player-view';
-
-const NO_ACTIONS: AvailableActions = { intents: [], bidRange: null };
+import { legalIntents } from '../../domain/state/legal-intents';
+import type { PlayerView, SeatInfo } from './player-view';
 
 /** Baut die Sicht eines Sitzes Feld für Feld auf, damit nichts ungewollt durchrutscht. */
 export function projectStateFor(
@@ -41,20 +39,20 @@ export function projectStateFor(
         }
       : null,
     declarer: round?.declarer ?? null,
+    // Bis Schritt 13 liegt der Dabb verdeckt; wer seine Karten sehen darf, entscheidet sich dort.
+    dabb: round ? { size: round.dabb.length, status: 'table', cards: null } : null,
+    // Ansage, Meldungen, Stiche, Abrechnung und Spielende füllen die Schritte 14–18.
+    declaration: null,
+    melds: seats.map(() => null),
+    trick: null,
+    lastTrick: null,
+    roundResult: null,
+    readySeats: [],
     activeSeat: activeSeat(state),
     scores: [...state.scores],
     abortReason: state.abortReason,
-    availableActions: availableActions(state, seat),
-  };
-}
-
-/** Wächst mit den Schritten 13–18 um die Intents der übrigen Phasen und die legalen Karten. */
-function availableActions(state: GameState, seat: Seat): AvailableActions {
-  const { phase, round } = state;
-  if (phase !== 'bidding' || round === null || activeSeat(state) !== seat) return NO_ACTIONS;
-  return {
-    intents: ['bid', 'pass'],
-    bidRange: { min: minimumBid(round.bidding), max: MAX_BID, step: BID_STEP },
+    winners: null,
+    availableActions: legalIntents(state, seat),
   };
 }
 

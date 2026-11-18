@@ -5,7 +5,7 @@ import { NO_SPECIAL_RULES, type GameConfig } from '../config/game-config';
 import { applyIntent } from './apply-intent';
 import { OPENING_BID } from './bidding';
 import { createGame, type GameState } from './game-state';
-import { SYSTEM, type Actor, type Intent, type IntentResult } from './intents';
+import { SYSTEM, type Actor, type Intent, type IntentResult, type PlayerIntent } from './intents';
 
 const config: GameConfig = {
   playerCount: 3,
@@ -138,6 +138,26 @@ describe('applyIntent', () => {
         ok: false,
         code: 'WRONG_PHASE',
       });
+    });
+  });
+
+  describe('Züge der übrigen Phasen', () => {
+    const later: PlayerIntent[] = [
+      { type: 'takeDabb' },
+      { type: 'discardToDabb', cardIds: ['herz-ass-1'] },
+      { type: 'declare', trump: 'herz', mode: 'play' },
+      { type: 'submitMelds', meldIds: [] },
+      { type: 'playCard', cardId: 'herz-ass-1' },
+      { type: 'readyForNextRound' },
+    ];
+
+    it.each(later)('lehnt $type ab, bis die Regeln umgesetzt sind', (intent) => {
+      const bidding = deepFreeze(started());
+      const decided = deepFreeze(play(started(), [2, { type: 'pass' }], [0, { type: 'pass' }]));
+
+      expect(applyIntent(bidding, 2, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+      expect(decided.phase).toBe('dabb');
+      expect(applyIntent(decided, 1, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
     });
   });
 

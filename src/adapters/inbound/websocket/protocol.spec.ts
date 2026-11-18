@@ -1,12 +1,24 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { PlayerView } from '../../../application/projection/player-view';
 import { projectStateFor } from '../../../application/projection/project-state';
+import { makeCard } from '../../../domain/cards/card';
 import { buildDeck } from '../../../domain/cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from '../../../domain/config/game-config';
+import type { Meld } from '../../../domain/melds/meld';
 import { applyIntent } from '../../../domain/state/apply-intent';
 import { createGame, type GameState } from '../../../domain/state/game-state';
-import { SYSTEM, type Actor, type GameEvent, type Intent } from '../../../domain/state/intents';
+import {
+  SYSTEM,
+  type Actor,
+  type GameEvent,
+  type Intent,
+  type PlayerIntent,
+} from '../../../domain/state/intents';
 import {
   CLIENT_EVENTS,
+  MAX_IDS_PER_INTENT,
   SERVER_EVENTS,
   createRoomPayloadSchema,
   gameEventsSchema,
@@ -96,6 +108,36 @@ describe('Client-Payloads', () => {
     ).toBe(true);
   });
 
+  it.each<PlayerIntent>([
+    { type: 'takeDabb' },
+    { type: 'discardToDabb', cardIds: ['herz-ass-1', 'eichel-zehn-2'] },
+    { type: 'declare', trump: 'schellen', mode: 'abgehen' },
+    { type: 'submitMelds', meldIds: [] },
+    { type: 'playCard', cardId: 'gruen-ober-2' },
+    { type: 'readyForNextRound' },
+  ])('nimmt $type als Zug der übrigen Phasen an', (intent) => {
+    expect(intentPayloadSchema.parse({ expectedVersion: 7, intent })).toEqual({
+      expectedVersion: 7,
+      intent,
+    });
+  });
+
+  it.each([
+    ['Ansage ohne Trumpf', { type: 'declare', mode: 'play' }],
+    ['Ansage mit unbekannter Farbe', { type: 'declare', trump: 'pik', mode: 'play' }],
+    ['Ansage mit unbekannter Spielart', { type: 'declare', trump: 'herz', mode: 'durch' }],
+    ['Drücken ohne Karten-Liste', { type: 'discardToDabb' }],
+    [
+      'Drücken mit übergroßer Liste',
+      { type: 'discardToDabb', cardIds: Array<string>(MAX_IDS_PER_INTENT + 1).fill('herz-ass-1') },
+    ],
+    ['Ausspielen mit Kartenobjekt', { type: 'playCard', cardId: { suit: 'herz', rank: 'ass' } }],
+    ['Aufnehmen mit Zusatzfeld', { type: 'takeDabb', seat: 1 }],
+    ['unbekannter Zug', { type: 'cheat' }],
+  ])('weist fehlerhafte Züge ab: %s', (_, intent) => {
+    expect(intentPayloadSchema.safeParse({ expectedVersion: 1, intent }).success).toBe(false);
+  });
+
   it.each([
     [
       'System-Intent startRound',
@@ -124,6 +166,95 @@ describe('Server-Events', () => {
     }
   });
 
+  describe('PlayerView der ganzen Runde', () => {
+    const koenig = makeCard('herz', 'koenig', 1);
+    const ober = makeCard('herz', 'ober', 1);
+    const ass = makeCard('eichel', 'ass', 2);
+    const paar: Meld = { id: 'paar-herz-1', kind: 'paar', cards: [koenig, ober], points: 40 };
+    const base = projectStateFor(fullBiddingRound.states[4], 1, seats);
+
+    // Zustände, die die Engine erst mit den Schritten 13–18 erzeugt.
+    const views: [string, PlayerView][] = [
+      [
+        'Dabb aufgenommen',
+        {
+          ...base,
+          phase: 'dabb',
+          dabb: { size: 4, status: 'taken', cards: [koenig, ober, ass, ass] },
+          availableActions: [{ type: 'discardToDabb', count: 4 }],
+        },
+      ],
+      [
+        'Ansage',
+        {
+          ...base,
+          phase: 'declare',
+          dabb: { size: 4, status: 'discarded', cards: null },
+          availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
+        },
+      ],
+      [
+        'Melden',
+        {
+          ...base,
+          phase: 'meld',
+          declaration: { trump: 'herz', mode: 'play' },
+          melds: [null, { melds: [paar], points: 40 }, null],
+          availableActions: [{ type: 'submitMelds', melds: [paar] }],
+        },
+      ],
+      [
+        'Stichspiel',
+        {
+          ...base,
+          phase: 'trick',
+          declaration: { trump: 'herz', mode: 'play' },
+          trick: { plays: [{ seat: 0, card: ass }] },
+          lastTrick: {
+            plays: [
+              { seat: 1, card: koenig },
+              { seat: 2, card: ober },
+              { seat: 0, card: ass },
+            ],
+            winner: 0,
+          },
+          availableActions: [{ type: 'playCard', cardIds: [koenig.id, ober.id] }],
+        },
+      ],
+      [
+        'Abrechnung',
+        {
+          ...base,
+          phase: 'score',
+          roundResult: {
+            outcome: 'failed',
+            parties: [
+              { trickPoints: 120, meldPoints: 0, meldsCounted: true, delta: 120 },
+              { trickPoints: 90, meldPoints: 40, meldsCounted: false, delta: -320 },
+              { trickPoints: 40, meldPoints: 20, meldsCounted: true, delta: 60 },
+            ],
+          },
+          readySeats: [0, 2],
+          scores: [120, -320, 60],
+          availableActions: [{ type: 'readyForNextRound' }],
+        },
+      ],
+      ['Spielende', { ...base, phase: 'terminated', scores: [1010, 400, 1010], winners: [0, 2] }],
+    ];
+
+    it.each(views)('beschreibt die Sicht: %s', (_, view) => {
+      expect(playerViewSchema.parse(view)).toEqual(view);
+    });
+
+    it.each([
+      ['unbekannte Aktion', { availableActions: [{ type: 'cheat' }] }],
+      ['unbekannte Dabb-Lage', { dabb: { size: 4, status: 'open', cards: null } }],
+      ['Ansage ohne Spielart', { declaration: { trump: 'herz' } }],
+    ])('weist ab: %s', (_, change) => {
+      expect(playerViewSchema.safeParse({ ...base, ...change }).success).toBe(false);
+    });
+  });
+
   it('beschreibt jedes Ereignis, das die Engine erzeugt', () => {
     const { events } = fullBiddingRound;
 
@@ -131,6 +262,37 @@ describe('Server-Events', () => {
       new Set(['roundStarted', 'bidPlaced', 'passed', 'biddingWon', 'gameAborted']),
     );
     expect(gameEventsSchema.parse({ version: 5, events })).toEqual({ version: 5, events });
+  });
+
+  it('beschreibt die Ereignisse der übrigen Phasen', () => {
+    const koenig = makeCard('herz', 'koenig', 1);
+    const ober = makeCard('herz', 'ober', 1);
+    const events: GameEvent[] = [
+      { type: 'dabbTaken', seat: 1 },
+      { type: 'dabbDiscarded', seat: 1 },
+      { type: 'declared', seat: 1, trump: 'herz', mode: 'play' },
+      {
+        type: 'meldsSubmitted',
+        seat: 1,
+        melds: [{ id: 'paar-herz-1', kind: 'paar', cards: [koenig, ober], points: 40 }],
+        points: 40,
+      },
+      { type: 'cardPlayed', seat: 1, card: koenig },
+      { type: 'trickWon', winner: 2 },
+      { type: 'roundScored', outcome: 'made' },
+      { type: 'playerReady', seat: 0 },
+      { type: 'gameFinished', winners: [1] },
+    ];
+
+    expect(gameEventsSchema.parse({ version: 30, events })).toEqual({ version: 30, events });
+  });
+
+  it.each([
+    ['unbekanntes Ereignis', { type: 'dabbRevealed', seat: 1 }],
+    ['unbekannte Meldung', { type: 'meldsSubmitted', seat: 1, melds: [{ kind: 'x' }], points: 0 }],
+    ['unbekannter Rundenausgang', { type: 'roundScored', outcome: 'draw' }],
+  ])('weist ab: %s', (_, event) => {
+    expect(gameEventsSchema.safeParse({ version: 1, events: [event] }).success).toBe(false);
   });
 
   it('unterscheidet erfolgreiche und fehlgeschlagene Acknowledgements', () => {
@@ -173,5 +335,14 @@ describe('protocolJsonSchema', () => {
 
   it('ist als JSON serialisierbar', () => {
     expect(() => JSON.parse(JSON.stringify(exported))).not.toThrow();
+  });
+
+  it('stimmt mit der eingecheckten Schema-Datei überein', () => {
+    // Schlägt das fehl: `npm run protocol:export` ausführen und die Datei mit einchecken.
+    const committed: unknown = JSON.parse(
+      readFileSync(join(process.cwd(), 'protocol', 'protocol.schema.json'), 'utf8'),
+    );
+
+    expect(committed).toEqual(JSON.parse(JSON.stringify(exported)));
   });
 });

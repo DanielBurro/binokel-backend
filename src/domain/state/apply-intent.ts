@@ -44,6 +44,21 @@ function applySystemIntent(state: GameState, intent: SystemIntent): IntentResult
 }
 
 function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): IntentResult {
+  switch (intent.type) {
+    case 'bid':
+    case 'pass':
+      return applyBidding(state, seat, intent);
+    // Die Regeln der übrigen Phasen folgen mit den Schritten 13–18.
+    default:
+      return fail('WRONG_PHASE');
+  }
+}
+
+function applyBidding(
+  state: GameState,
+  seat: Seat,
+  intent: Extract<PlayerIntent, { type: 'bid' | 'pass' }>,
+): IntentResult {
   const { round } = state;
   if (state.phase !== 'bidding' || round === null) return fail('WRONG_PHASE');
 
