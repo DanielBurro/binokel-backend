@@ -1,5 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import type { Card } from '../cards/card';
 import { buildDeck } from '../cards/deck';
 import {
   NO_SPECIAL_RULES,
@@ -10,8 +11,8 @@ import {
 import type { Seat } from '../rules/parties';
 import { applyIntent } from './apply-intent';
 import { BID_STEP, MAX_BID, OPENING_BID } from './bidding';
-import { createGame, type GameState } from './game-state';
-import { SYSTEM, type LegalIntent, type PlayerIntent } from './intents';
+import { activeSeat, createGame, type GameState } from './game-state';
+import { SYSTEM, type IntentResult, type LegalIntent, type PlayerIntent } from './intents';
 import { legalIntents } from './legal-intents';
 
 const configFor = (playerCount: PlayerCount, deckSize: DeckSize): GameConfig => ({
@@ -30,12 +31,20 @@ function started(config: GameConfig, dealer: Seat): GameState {
   return result.state;
 }
 
+function ok(result: IntentResult): GameState {
+  if (!result.ok) throw new Error(`Unerwarteter Fehler ${result.code}`);
+  return result.state;
+}
+
 function seatsOf(state: GameState): Seat[] {
   return Array.from({ length: state.config.playerCount }, (_, seat) => seat);
 }
 
-/** Macht aus einem angebotenen Zug einen konkreten; `pick` wählt innerhalb des Spielraums. */
-function concretize(legal: LegalIntent, pick: number): PlayerIntent {
+/**
+ * Macht aus einem angebotenen Zug einen konkreten; `pick` wählt innerhalb des Spielraums,
+ * beim Drücken also, ab welcher Handkarte gedrückt wird.
+ */
+function concretize(legal: LegalIntent, hand: readonly Card[], pick: number): PlayerIntent {
   switch (legal.type) {
     case 'bid': {
       const choices = (legal.max - legal.min) / legal.step + 1;
@@ -43,6 +52,15 @@ function concretize(legal: LegalIntent, pick: number): PlayerIntent {
     }
     case 'pass':
       return { type: 'pass' };
+    case 'takeDabb':
+      return { type: 'takeDabb' };
+    case 'discardToDabb': {
+      const cardIds = Array.from(
+        { length: legal.count },
+        (_, offset) => hand[(pick + offset) % hand.length].id,
+      );
+      return { type: 'discardToDabb', cardIds };
+    }
     default:
       throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
   }
@@ -69,16 +87,46 @@ describe('legalIntents', () => {
     expect(legalIntents(state, 1)).toEqual([]);
   });
 
-  it('bietet nach dem Reizen und nach einem Abbruch nichts mehr an', () => {
-    const maxBid = applyIntent(started(config, 0), 2, { type: 'bid', amount: MAX_BID });
-    const aborted = applyIntent(started(config, 0), SYSTEM, {
-      type: 'abortGame',
-      reason: 'PLAYER_LEFT',
-    });
+  it('bietet nach dem Reizen nur dem Spielmacher erst das Aufnehmen, dann das Drücken an', () => {
+    // Sitz 2 bietet 1000 und wird damit sofort Spielmacher.
+    const decided = ok(applyIntent(started(config, 0), 2, { type: 'bid', amount: MAX_BID }));
+    expect(seatsOf(decided).map((seat) => legalIntents(decided, seat))).toEqual([
+      [],
+      [],
+      [{ type: 'takeDabb' }],
+    ]);
 
-    for (const result of [maxBid, aborted]) {
-      if (!result.ok) throw new Error(`Unerwarteter Fehler ${result.code}`);
-      expect(seatsOf(result.state).flatMap((seat) => legalIntents(result.state, seat))).toEqual([]);
+    const taken = ok(applyIntent(decided, 2, { type: 'takeDabb' }));
+    expect(seatsOf(taken).map((seat) => legalIntents(taken, seat))).toEqual([
+      [],
+      [],
+      [{ type: 'discardToDabb', count: 4 }],
+    ]);
+
+    // Bei 3 Spielern und 48 Karten hat der Dabb nur 3 Karten.
+    const small = ok(
+      applyIntent(started(configFor(3, 48), 0), 2, { type: 'bid', amount: MAX_BID }),
+    );
+    expect(legalIntents(ok(applyIntent(small, 2, { type: 'takeDabb' })), 2)).toEqual([
+      { type: 'discardToDabb', count: 3 },
+    ]);
+  });
+
+  it('bietet nach dem Drücken und nach einem Abbruch nichts mehr an', () => {
+    const decided = ok(applyIntent(started(config, 0), 2, { type: 'bid', amount: MAX_BID }));
+    const taken = ok(applyIntent(decided, 2, { type: 'takeDabb' }));
+    const discarded = ok(
+      applyIntent(taken, 2, {
+        type: 'discardToDabb',
+        cardIds: taken.round!.hands[2].slice(0, 4).map((card) => card.id),
+      }),
+    );
+    const aborted = ok(
+      applyIntent(started(config, 0), SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
+    );
+
+    for (const state of [discarded, aborted]) {
+      expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
     }
   });
 
@@ -97,8 +145,9 @@ describe('legalIntents', () => {
         fc.property(configs, fc.nat(3), picks, (anyConfig, rawDealer, list) => {
           let state = started(anyConfig, rawDealer % anyConfig.playerCount);
 
-          // Am Ende passen alle, damit das Reizen sicher entschieden wird.
-          const passes = Array.from({ length: anyConfig.playerCount }, (): [number, number] => [
+          // Am Ende passen alle, damit das Reizen sicher entschieden wird; danach bleiben je
+          // ein Zug für Aufnehmen und Drücken.
+          const passes = Array.from({ length: anyConfig.playerCount + 2 }, (): [number, number] => [
             1, 0,
           ]);
           for (const [which, value] of [...list, ...passes]) {
@@ -106,27 +155,31 @@ describe('legalIntents', () => {
             const active = offers.findIndex((offer) => offer.length > 0);
             if (active === -1) break;
 
-            // Genau ein Sitz ist am Zug, alle anderen dürfen nichts.
+            // Genau ein Sitz ist am Zug, alle anderen dürfen denselben Zug nicht ausführen.
             expect(offers.filter((offer) => offer.length > 0)).toHaveLength(1);
+            expect(activeSeat(state)).toBe(active);
+            const offer = offers[active];
+            const intent = concretize(
+              offer[which % offer.length],
+              state.round!.hands[active],
+              value,
+            );
             for (const seat of seatsOf(state).filter((other) => other !== active)) {
-              expect(applyIntent(state, seat, { type: 'pass' }).ok).toBe(false);
+              expect(applyIntent(state, seat, intent).ok).toBe(false);
             }
 
-            const offer = offers[active];
-            const result = applyIntent(
-              state,
-              active,
-              concretize(offer[which % offer.length], value),
-            );
+            const result = applyIntent(state, active, intent);
             expect(result.ok).toBe(true);
             if (!result.ok) return;
             expect(result.state.version).toBe(state.version + 1);
             state = result.state;
           }
 
-          // Kein Deadlock: Bietet niemand mehr etwas an, ist das Reizen entschieden.
-          expect(state.phase).toBe('dabb');
-          expect(state.round?.declarer).not.toBeNull();
+          expect(activeSeat(state)).toBeNull();
+          // Kein Deadlock: Bietet niemand mehr etwas an, ist der Dabb gedrückt. Die Ansage
+          // folgt mit Schritt 14.
+          expect(state.phase).toBe('declare');
+          expect(state.round?.dabbStatus).toBe('discarded');
         }),
       );
     });

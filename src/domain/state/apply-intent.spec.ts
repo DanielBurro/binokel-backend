@@ -141,10 +141,55 @@ describe('applyIntent', () => {
     });
   });
 
+  describe('Dabb', () => {
+    /** Sitz 1 wird Spielmacher; mit ungemischtem Blatt liegen 4 Karten im Dabb. */
+    const decided = () => play(started(), [2, { type: 'pass' }], [0, { type: 'pass' }]);
+
+    it('lässt den Spielmacher aufnehmen und drücken und wechselt dann zur Ansage', () => {
+      const taken = play(decided(), [1, { type: 'takeDabb' }]);
+      expect(taken).toMatchObject({ version: 4, phase: 'dabb' });
+      expect(taken.round!.hands[1]).toHaveLength(16);
+
+      const discard = taken.round!.hands[1].slice(0, 4);
+      const result = applyIntent(deepFreeze(taken), 1, {
+        type: 'discardToDabb',
+        cardIds: discard.map((card) => card.id),
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { version: 5, phase: 'declare' },
+        events: [{ type: 'dabbDiscarded', seat: 1 }],
+      });
+      if (!result.ok) return;
+      expect(result.state.round).toMatchObject({ dabbStatus: 'discarded', discarded: discard });
+      expect(result.state.round!.hands[1]).toHaveLength(12);
+    });
+
+    it('lässt den Zustand bei Regelverstößen unverändert', () => {
+      const state = deepFreeze(decided());
+
+      expect(applyIntent(state, 0, { type: 'takeDabb' })).toEqual({
+        ok: false,
+        code: 'NOT_YOUR_TURN',
+      });
+      expect(applyIntent(state, 1, { type: 'discardToDabb', cardIds: [] })).toEqual({
+        ok: false,
+        code: 'DABB_NOT_TAKEN',
+      });
+      expect(state.version).toBe(3);
+    });
+
+    it('nimmt beim Reizen keinen Dabb-Zug an', () => {
+      expect(applyIntent(started(), 2, { type: 'takeDabb' })).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+    });
+  });
+
   describe('Züge der übrigen Phasen', () => {
     const later: PlayerIntent[] = [
-      { type: 'takeDabb' },
-      { type: 'discardToDabb', cardIds: ['herz-ass-1'] },
       { type: 'declare', trump: 'herz', mode: 'play' },
       { type: 'submitMelds', meldIds: [] },
       { type: 'playCard', cardId: 'herz-ass-1' },

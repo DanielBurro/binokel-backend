@@ -136,17 +136,18 @@ describe('projectStateFor', () => {
     expect(projectStateFor(state, 1, seats).availableActions).toEqual([]);
   });
 
-  it('zeigt nach dem Reizen den Spielmacher und bietet keine Gebote mehr an', () => {
+  it('zeigt nach dem Reizen den Spielmacher und bietet nur ihm den Dabb an', () => {
     const state = play(started(config), [2, { type: 'pass' }], [0, { type: 'pass' }]);
     const view = projectStateFor(state, 1, seats);
 
     expect(view).toMatchObject({
       phase: 'dabb',
       declarer: 1,
-      activeSeat: null,
+      activeSeat: 1,
       bidding: { highestBid: OPENING_BID, highestBidder: 1, passed: [2, 0] },
-      availableActions: [],
+      availableActions: [{ type: 'takeDabb' }],
     });
+    expect(projectStateFor(state, 0, seats).availableActions).toEqual([]);
   });
 
   it('zeigt nach einem Abbruch den Grund', () => {

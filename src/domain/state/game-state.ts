@@ -19,6 +19,13 @@ export type DeclareMode = (typeof DECLARE_MODES)[number];
 export const ROUND_OUTCOMES = ['made', 'failed', 'abgehen'] as const;
 export type RoundOutcome = (typeof ROUND_OUTCOMES)[number];
 
+/**
+ * 'table': liegt verdeckt in der Mitte; 'taken': beim Spielmacher auf der Hand;
+ * 'discarded': Der Spielmacher hat gedrückt.
+ */
+export const DABB_STATUSES = ['table', 'taken', 'discarded'] as const;
+export type DabbStatus = (typeof DABB_STATUSES)[number];
+
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
   readonly highestBid: number;
@@ -33,7 +40,14 @@ export interface RoundState {
   readonly forehand: Seat;
   /** Nach Sitz indiziert. */
   readonly hands: readonly (readonly Card[])[];
+  /**
+   * Die ausgeteilten Dabb-Karten. Sie bleiben nach der Aufnahme hier vermerkt, damit der
+   * Spielmacher sieht, welche Karten aus dem Dabb kamen; liegen tun sie dann auf seiner Hand.
+   */
   readonly dabb: readonly Card[];
+  readonly dabbStatus: DabbStatus;
+  /** Vom Spielmacher gedrückte Karten; leer bis zum Drücken. Ihre Augen zählen für ihn. */
+  readonly discarded: readonly Card[];
   readonly bidding: BiddingState;
   /** Spielmacher nach dem Reizen; sein Reizwert ist `bidding.highestBid`. */
   readonly declarer: Seat | null;
@@ -66,10 +80,18 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 13–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 14–18 hinzu. */
 export function activeSeat(state: GameState): Seat | null {
-  if (state.phase !== 'bidding' || state.round === null) return null;
-  return state.round.bidding.activeSeat;
+  const { phase, round } = state;
+  if (round === null) return null;
+  switch (phase) {
+    case 'bidding':
+      return round.bidding.activeSeat;
+    case 'dabb':
+      return round.declarer;
+    default:
+      return null;
+  }
 }
 
 const PHASE_SUCCESSORS: Readonly<Partial<Record<Phase, RoundPhase>>> = {

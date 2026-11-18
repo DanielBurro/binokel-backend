@@ -56,7 +56,14 @@ describe('activeSeat', () => {
     expect(activeSeat(started())).toBe(2);
   });
 
-  it.each<Phase>(['created', 'dabb', 'terminated'])('ist in Phase %s niemand', (phase) => {
+  it('nennt in der Dabb-Phase den Spielmacher', () => {
+    const state = started();
+    expect(activeSeat({ ...state, phase: 'dabb', round: { ...state.round!, declarer: 1 } })).toBe(
+      1,
+    );
+  });
+
+  it.each<Phase>(['created', 'declare', 'terminated'])('ist in Phase %s niemand', (phase) => {
     expect(activeSeat({ ...started(), phase })).toBeNull();
   });
 

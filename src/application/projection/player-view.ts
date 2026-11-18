@@ -2,7 +2,13 @@ import type { Card, Suit } from '../../domain/cards/card';
 import type { GameConfig } from '../../domain/config/game-config';
 import type { Meld } from '../../domain/melds/meld';
 import type { PartyId, Seat } from '../../domain/rules/parties';
-import type { AbortReason, DeclareMode, Phase, RoundOutcome } from '../../domain/state/game-state';
+import type {
+  AbortReason,
+  DabbStatus,
+  DeclareMode,
+  Phase,
+  RoundOutcome,
+} from '../../domain/state/game-state';
 import type { LegalIntent } from '../../domain/state/intents';
 
 /** Sitzungsdaten eines Sitzes; kommen vom Raum, damit der GameState frei davon bleibt. */
@@ -22,13 +28,6 @@ export interface BiddingView {
   readonly highestBidder: Seat;
   readonly passed: readonly Seat[];
 }
-
-/**
- * 'table': liegt verdeckt in der Mitte; 'taken': beim Spielmacher auf der Hand;
- * 'discarded': Der Spielmacher hat gedrückt.
- */
-export const DABB_STATUSES = ['table', 'taken', 'discarded'] as const;
-export type DabbStatus = (typeof DABB_STATUSES)[number];
 
 export interface DabbView {
   /** Anzahl der Karten im Dabb bzw. der gedrückten Karten. */
