@@ -1,6 +1,5 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import type { Card } from '../cards/card';
 import { buildDeck } from '../cards/deck';
 import {
   NO_SPECIAL_RULES,
@@ -12,7 +11,8 @@ import type { Seat } from '../rules/parties';
 import { applyIntent } from './apply-intent';
 import { BID_STEP, MAX_BID, OPENING_BID } from './bidding';
 import { activeSeat, createGame, type GameState } from './game-state';
-import { SYSTEM, type IntentResult, type LegalIntent, type PlayerIntent } from './intents';
+import { concretize, seededRandom } from '../../test/random-bot';
+import { SYSTEM, type IntentResult } from './intents';
 import { legalIntents } from './legal-intents';
 
 const configFor = (playerCount: PlayerCount, deckSize: DeckSize): GameConfig => ({
@@ -38,32 +38,6 @@ function ok(result: IntentResult): GameState {
 
 function seatsOf(state: GameState): Seat[] {
   return Array.from({ length: state.config.playerCount }, (_, seat) => seat);
-}
-
-/**
- * Macht aus einem angebotenen Zug einen konkreten; `pick` wählt innerhalb des Spielraums,
- * beim Drücken also, ab welcher Handkarte gedrückt wird.
- */
-function concretize(legal: LegalIntent, hand: readonly Card[], pick: number): PlayerIntent {
-  switch (legal.type) {
-    case 'bid': {
-      const choices = (legal.max - legal.min) / legal.step + 1;
-      return { type: 'bid', amount: legal.min + (pick % choices) * legal.step };
-    }
-    case 'pass':
-      return { type: 'pass' };
-    case 'takeDabb':
-      return { type: 'takeDabb' };
-    case 'discardToDabb': {
-      const cardIds = Array.from(
-        { length: legal.count },
-        (_, offset) => hand[(pick + offset) % hand.length].id,
-      );
-      return { type: 'discardToDabb', cardIds };
-    }
-    default:
-      throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
-  }
 }
 
 describe('legalIntents', () => {
@@ -137,7 +111,7 @@ describe('legalIntents', () => {
       configFor(4, 40),
       configFor(4, 48),
     );
-    // Je Zug: Welcher der angebotenen Züge, und welcher Wert aus seinem Spielraum.
+    // Je Zug: Welcher der angebotenen Züge, und ein Seed für die Wahl in seinem Spielraum.
     const picks = fc.array(fc.tuple(fc.nat(), fc.nat()), { maxLength: 120 });
 
     it('nimmt jeden angebotenen Zug an und lehnt Züge ohne Angebot ab', () => {
@@ -162,7 +136,7 @@ describe('legalIntents', () => {
             const intent = concretize(
               offer[which % offer.length],
               state.round!.hands[active],
-              value,
+              seededRandom(value),
             );
             for (const seat of seatsOf(state).filter((other) => other !== active)) {
               expect(applyIntent(state, seat, intent).ok).toBe(false);
