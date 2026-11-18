@@ -195,6 +195,67 @@ describe('Socket.IO-Durchstich', () => {
     }
   });
 
+  it('lässt den Spielmacher den Dabb aufnehmen und drücken, ohne ihn anderen zu zeigen', async () => {
+    const { players } = await fullRoom();
+    const [anna, ben, cem] = players;
+    await cem.emit('game:intent', { expectedVersion: 1, intent: { type: 'bid', amount: 160 } });
+    await anna.emit('game:intent', { expectedVersion: 2, intent: { type: 'pass' } });
+    await ben.emit('game:intent', { expectedVersion: 3, intent: { type: 'pass' } });
+
+    const { hands, dabb } = deal(buildDeck(40), config, 0);
+    const dabbIds = dabb.map((card) => `"${card.id}"`);
+    await expect(cem.waitFor('game:state', stateWith(4))).resolves.toMatchObject({
+      activeSeat: 2,
+      availableActions: [{ type: 'takeDabb' }],
+    });
+    await expect(
+      anna.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'NOT_YOUR_TURN' } });
+
+    await expect(
+      cem.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } }),
+    ).resolves.toEqual({ ok: true, version: 5 });
+    const taken = playerViewSchema.parse(await cem.waitFor('game:state', stateWith(5)));
+    expect(taken.dabb).toEqual({ size: 4, status: 'taken', cards: dabb });
+    expect(taken.hand).toEqual([...hands[2], ...dabb]);
+    expect(taken.availableActions).toEqual([{ type: 'discardToDabb', count: 4 }]);
+    for (const other of [anna, ben]) {
+      const view = playerViewSchema.parse(await other.waitFor('game:state', stateWith(5)));
+      expect(view.dabb).toEqual({ size: 4, status: 'taken', cards: null });
+      const json = JSON.stringify(view);
+      for (const id of dabbIds) expect(json).not.toContain(id);
+    }
+
+    const pressed = taken.hand.slice(0, 4);
+    await expect(
+      cem.emit('game:intent', {
+        expectedVersion: 5,
+        intent: { type: 'discardToDabb', cardIds: pressed.slice(0, 3).map((card) => card.id) },
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'WRONG_DISCARD_COUNT' } });
+    await expect(
+      cem.emit('game:intent', {
+        expectedVersion: 5,
+        intent: { type: 'discardToDabb', cardIds: pressed.map((card) => card.id) },
+      }),
+    ).resolves.toEqual({ ok: true, version: 6 });
+
+    await expect(cem.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
+      phase: 'declare',
+      dabb: { size: 4, status: 'discarded', cards: pressed },
+      availableActions: [],
+    });
+    for (const other of [anna, ben]) {
+      await expect(other.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
+        phase: 'declare',
+        dabb: { size: 4, status: 'discarded', cards: null },
+      });
+      await expect(
+        other.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 6),
+      ).resolves.toEqual({ version: 6, events: [{ type: 'dabbDiscarded', seat: 2 }] });
+    }
+  });
+
   it('beantwortet fehlerhafte Anfragen mit Fehlercodes', async () => {
     const anna = await client();
 
