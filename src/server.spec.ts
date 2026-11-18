@@ -338,6 +338,26 @@ describe('Socket.IO-Durchstich', () => {
     ).resolves.toMatchObject({ roomId: first.roomId });
   });
 
+  it('beantwortet GET /health ohne Cache mit Status und Laufzeit', async () => {
+    await server.close();
+    let now = 1_000_000;
+    await start({ clock: { now: () => now } });
+    now += 61_999;
+
+    const response = await fetch(`${url}/health`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-powered-by')).toBeNull();
+    await expect(response.json()).resolves.toEqual({ status: 'ok', uptimeSeconds: 61 });
+  });
+
+  it('antwortet auf unbekannte HTTP-Pfade mit 404', async () => {
+    const response = await fetch(`${url}/unbekannt`);
+
+    expect(response.status).toBe(404);
+  });
+
   it('meldet unerwartete Ausnahmen als INTERNAL_ERROR', async () => {
     await server.close();
     await start({

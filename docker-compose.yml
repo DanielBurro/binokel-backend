@@ -1,0 +1,20 @@
+# Startet den Server mit `docker compose up --build`, erreichbar unter http://localhost:3000.
+# Werte lassen sich über eine .env-Datei neben dieser Datei oder die Shell überschreiben,
+# z. B. `CORS_ORIGIN='*' docker compose up` für ein Web-Frontend im Browser.
+services:
+  backend:
+    build: .
+    image: binokel-backend
+    ports:
+      - '${HOST_PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # Leer sperrt Browser-Origins; native Apps senden keinen Origin und sind nicht betroffen.
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      RECONNECT_GRACE_MS: ${RECONNECT_GRACE_MS:-300000}
+      ROOM_TTL_MS: ${ROOM_TTL_MS:-3600000}
+    # Der Healthcheck gegen GET /health kommt aus dem Dockerfile und gilt so auch für `docker run`.
+    restart: unless-stopped
+    # Mehr als die 10 s Shutdown-Frist aus src/index.ts, damit Docker nicht vorher SIGKILL sendet.
+    stop_grace_period: 15s

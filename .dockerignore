@@ -1,0 +1,21 @@
+# Das Image braucht nur package*.json, tsconfig.json und src/.
+# Alles andere bleibt aus dem Build-Kontext, damit er klein bleibt und keine lokalen Dateien
+# (z. B. .env oder node_modules für eine andere Plattform) im Image landen.
+node_modules
+dist
+coverage
+protocol
+.git
+.github
+.husky
+.vscode
+.env
+.env.*
+*.log
+*.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+.DS_Store
+**/*.spec.ts
+src/test

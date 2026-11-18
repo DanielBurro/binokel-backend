@@ -7,6 +7,7 @@ import type { ShufflerPort } from './application/ports/outbound/shuffler.port';
 import { createGameService } from './application/services/game-service';
 import { createRoomService } from './application/services/room-service';
 import { createRoomStore } from './application/services/room-store';
+import { createHealthRouter } from './adapters/inbound/http/health-router';
 import { attachSocketIoAdapter } from './adapters/inbound/websocket/socket-io-adapter';
 import { createSocketIoServer } from './adapters/inbound/websocket/socket-io-server';
 import { createCryptoIdGenerator } from './adapters/outbound/crypto-id-generator';
@@ -35,12 +36,15 @@ export function createBinokelServer(
   env: Pick<Env, 'corsOrigins'>,
   overrides: ServerOverrides = {},
 ): BinokelServer {
+  const clock = overrides.clock ?? systemClock;
   const app = express();
+  app.disable('x-powered-by');
+  app.use(createHealthRouter(clock));
   const httpServer = http.createServer(app);
   const io = createSocketIoServer(httpServer, env);
 
   const broadcaster = createSocketIoBroadcaster(io);
-  const store = createRoomStore(createInMemoryRoomRepository(), overrides.clock ?? systemClock);
+  const store = createRoomStore(createInMemoryRoomRepository(), clock);
   const games = createGameService({
     store,
     broadcaster,
