@@ -83,7 +83,24 @@ describe('activeSeat', () => {
     expect(activeSeat({ ...state, phase, round: { ...state.round!, declarer: 1 } })).toBe(1);
   });
 
-  it.each<Phase>(['created', 'meld', 'terminated'])('ist in Phase %s niemand', (phase) => {
+  it('nennt beim Melden den nächsten Meldeberechtigten', () => {
+    const state = started();
+    const meld: GameState = {
+      ...state,
+      phase: 'meld',
+      round: { ...state.round!, declarer: 1, declaration: { trump: 'herz', mode: 'play' } },
+    };
+
+    expect(activeSeat(meld)).toBe(1);
+    expect(
+      activeSeat({
+        ...meld,
+        round: { ...meld.round!, melds: [null, { melds: [], points: 0 }, null] },
+      }),
+    ).toBe(2);
+  });
+
+  it.each<Phase>(['created', 'trick', 'terminated'])('ist in Phase %s niemand', (phase) => {
     expect(activeSeat({ ...started(), phase })).toBeNull();
   });
 

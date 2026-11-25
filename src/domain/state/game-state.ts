@@ -1,6 +1,8 @@
 import type { Card, Suit } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
+import type { Meld } from '../melds/meld';
 import { assertSeat, partyCount, type Seat } from '../rules/parties';
+import { nextMelder } from './melding';
 
 export const ROUND_PHASES = ['bidding', 'dabb', 'declare', 'meld', 'trick', 'score'] as const;
 export type RoundPhase = (typeof ROUND_PHASES)[number];
@@ -32,6 +34,12 @@ export type RoundOutcome = (typeof ROUND_OUTCOMES)[number];
 export const DABB_STATUSES = ['table', 'taken', 'discarded'] as const;
 export type DabbStatus = (typeof DABB_STATUSES)[number];
 
+/** Was ein Sitz gemeldet hat; öffentlich, gezählt wird es erst in der Abrechnung. */
+export interface SeatMelds {
+  readonly melds: readonly Meld[];
+  readonly points: number;
+}
+
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
   readonly highestBid: number;
@@ -59,6 +67,8 @@ export interface RoundState {
   readonly declarer: Seat | null;
   /** null bis zur Ansage. */
   readonly declaration: Declaration | null;
+  /** Nach Sitz indiziert; null, solange der Sitz nicht gemeldet hat oder nicht melden darf. */
+  readonly melds: readonly (SeatMelds | null)[];
 }
 
 export interface GameState {
@@ -88,7 +98,7 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 15–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 16–18 hinzu. */
 export function activeSeat(state: GameState): Seat | null {
   const { phase, round } = state;
   if (round === null) return null;
@@ -98,6 +108,8 @@ export function activeSeat(state: GameState): Seat | null {
     case 'dabb':
     case 'declare':
       return round.declarer;
+    case 'meld':
+      return nextMelder(round, state.config.playerCount);
     default:
       return null;
   }

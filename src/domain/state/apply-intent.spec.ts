@@ -4,7 +4,8 @@ import { buildDeck } from '../cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from '../config/game-config';
 import { applyIntent } from './apply-intent';
 import { OPENING_BID } from './bidding';
-import { createGame, type GameState } from './game-state';
+import { createGame, type DeclareMode, type GameState } from './game-state';
+import { legalIntents } from './legal-intents';
 import { SYSTEM, type Actor, type Intent, type IntentResult, type PlayerIntent } from './intents';
 
 const config: GameConfig = {
@@ -256,9 +257,81 @@ describe('applyIntent', () => {
     });
   });
 
+  describe('Melden', () => {
+    /** Sitz 1 ist Spielmacher, hat gedrückt und Herz angesagt (Version 6). */
+    const declared = (mode: DeclareMode) => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode }],
+      );
+    };
+    const pass = (seat: number): [Actor, Intent] => [seat, { type: 'submitMelds', meldIds: [] }];
+
+    it('lässt ab dem Spielmacher reihum melden und wechselt danach ins Stichspiel', () => {
+      const first = play(declared('play'), pass(1));
+      expect(first).toMatchObject({ version: 7, phase: 'meld' });
+      expect(first.round!.melds).toEqual([null, { melds: [], points: 0 }, null]);
+
+      const offered = legalIntents(play(first, pass(2)), 0)[0];
+      expect(offered.type).toBe('submitMelds');
+      if (offered.type !== 'submitMelds') return;
+      const result = applyIntent(deepFreeze(play(first, pass(2))), 0, {
+        type: 'submitMelds',
+        meldIds: offered.melds.map((meld) => meld.id),
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { version: 9, phase: 'trick' },
+        events: [{ type: 'meldsSubmitted', seat: 0, melds: offered.melds }],
+      });
+    });
+
+    it('lässt beim Abgehen nur die Gegner melden und geht dann in die Abrechnung', () => {
+      const state = play(declared('abgehen'), pass(2), pass(0));
+
+      expect(state).toMatchObject({ version: 8, phase: 'score' });
+      expect(state.round!.melds).toEqual([
+        { melds: [], points: 0 },
+        null,
+        { melds: [], points: 0 },
+      ]);
+    });
+
+    it('lässt den Zustand bei Regelverstößen unverändert', () => {
+      const state = deepFreeze(declared('play'));
+
+      expect(applyIntent(state, 0, { type: 'submitMelds', meldIds: [] })).toEqual({
+        ok: false,
+        code: 'NOT_YOUR_TURN',
+      });
+      expect(applyIntent(state, 1, { type: 'submitMelds', meldIds: ['gibt-es-nicht'] })).toEqual({
+        ok: false,
+        code: 'MELD_NOT_OFFERED',
+      });
+      expect(state.version).toBe(6);
+    });
+
+    it('nimmt Meldungen nur in der Meldephase an', () => {
+      expect(applyIntent(started(), 2, { type: 'submitMelds', meldIds: [] })).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+      expect(applyIntent(play(declared('play'), pass(1), pass(2), pass(0)), 1, pass(1)[1])).toEqual(
+        { ok: false, code: 'WRONG_PHASE' },
+      );
+    });
+  });
+
   describe('Züge der übrigen Phasen', () => {
     const later: PlayerIntent[] = [
-      { type: 'submitMelds', meldIds: [] },
       { type: 'playCard', cardId: 'herz-ass-1' },
       { type: 'readyForNextRound' },
     ];

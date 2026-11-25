@@ -32,6 +32,8 @@ export const ERROR_MESSAGES: Readonly<Record<ProtocolErrorCode, string>> = {
   WRONG_DISCARD_COUNT: 'Es müssen genau so viele Karten gedrückt werden, wie der Dabb hatte.',
   DUPLICATE_CARDS: 'Jede Karte darf nur einmal angegeben werden.',
   CARD_NOT_IN_HAND: 'Diese Karte ist nicht auf deiner Hand.',
+  DUPLICATE_MELDS: 'Jede Meldung darf nur einmal angegeben werden.',
+  MELD_NOT_OFFERED: 'Diese Meldung wurde dir nicht angeboten.',
   STALE_STATE: 'Der Spielstand hat sich inzwischen geändert.',
   INVALID_PAYLOAD: 'Die Nachricht entspricht nicht dem Protokoll.',
   INVALID_CONFIG: 'Diese Spielkonfiguration wird nicht unterstützt.',

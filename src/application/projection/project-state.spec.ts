@@ -11,6 +11,7 @@ import { applyIntent } from '../../domain/state/apply-intent';
 import { BID_STEP, MAX_BID, OPENING_BID } from '../../domain/state/bidding';
 import { createGame, type GameState } from '../../domain/state/game-state';
 import { SYSTEM, type Actor, type Intent } from '../../domain/state/intents';
+import { legalIntents } from '../../domain/state/legal-intents';
 import type { SeatInfo } from './player-view';
 import { projectStateFor } from './project-state';
 
@@ -41,6 +42,21 @@ function started(config: GameConfig): GameState {
     SYSTEM,
     { type: 'startRound', shuffledDeck: buildDeck(config.deckSize) },
   ]);
+}
+
+/** Jeder Meldeberechtigte meldet der Reihe nach seinen ganzen Vorschlag. */
+function meldEverything(state: GameState): GameState {
+  let current = state;
+  while (current.phase === 'meld') {
+    const seat = [0, 1, 2, 3].find((other) => legalIntents(current, other).length > 0)!;
+    const [offer] = legalIntents(current, seat);
+    if (offer.type !== 'submitMelds') throw new Error(`Unerwartetes Angebot ${offer.type}`);
+    current = play(current, [
+      seat,
+      { type: 'submitMelds', meldIds: offer.melds.map((meld) => meld.id) },
+    ]);
+  }
+  return current;
 }
 
 const config = configFor(3, 40);
@@ -187,6 +203,35 @@ describe('projectStateFor', () => {
     expect(projectStateFor(declared, 1, seats).declaration).not.toBe(declared.round!.declaration);
   });
 
+  it('zeigt allen Sitzen die gemeldeten Karten und Punkte, sobald ein Sitz gemeldet hat', () => {
+    const taken = play(
+      started(config),
+      [2, { type: 'pass' }],
+      [0, { type: 'pass' }],
+      [1, { type: 'takeDabb' }],
+    );
+    const declared = play(
+      taken,
+      [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+      [1, { type: 'declare', trump: 'herz', mode: 'play' }],
+    );
+    const melded = meldEverything(declared);
+    const expected = melded.round!.melds;
+
+    // Das ungemischte Blatt gibt mehreren Sitzen Meldungen, der Test ist also nicht leer.
+    expect(expected.filter((entry) => entry!.melds.length > 0).length).toBeGreaterThan(0);
+    for (const seat of [0, 1, 2]) {
+      expect(projectStateFor(declared, seat, seats).melds).toEqual([null, null, null]);
+      expect(projectStateFor(melded, seat, seats)).toMatchObject({
+        phase: 'trick',
+        melds: expected,
+      });
+    }
+    const view = projectStateFor(melded, 0, seats);
+    expect(view.melds[1]).not.toBe(expected[1]);
+    expect(view.melds[1]!.melds[0]?.cards).not.toBe(expected[1]!.melds[0]?.cards);
+  });
+
   it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
     const state = play(started(configFor(4, 48)), [2, { type: 'pass' }]);
 
@@ -262,11 +307,15 @@ describe('projectStateFor', () => {
       [4, 48],
     ];
 
-    /** Was der Sitz sehen darf: eigene Hand, als Spielmacher dazu den aufgenommenen Dabb. */
+    /**
+     * Was der Sitz sehen darf: eigene Hand, als Spielmacher dazu den aufgenommenen Dabb, und die
+     * gemeldeten Karten aller Sitze, weil Meldungen öffentlich sind.
+     */
     function visibleTo(state: GameState, seat: Seat): Set<string> {
-      const { hands, dabb, discarded, dabbStatus, declarer } = state.round!;
+      const { hands, dabb, discarded, dabbStatus, declarer, melds } = state.round!;
       const own = [...hands[seat]];
       if (seat === declarer && dabbStatus !== 'table') own.push(...dabb, ...discarded);
+      own.push(...melds.flatMap((entry) => entry?.melds.flatMap((meld) => meld.cards) ?? []));
       return new Set(own.map((card) => card.id));
     }
 
@@ -275,7 +324,7 @@ describe('projectStateFor', () => {
       (n, d) => {
         const leakConfig = configFor(n, d);
         const begun = started(leakConfig);
-        // Sitz 2 bietet 1000 und wird Spielmacher, nimmt auf, drückt und sagt an.
+        // Sitz 2 bietet 1000 und wird Spielmacher, nimmt auf, drückt und sagt an; danach melden alle.
         const decided = play(begun, [2, { type: 'bid', amount: MAX_BID }]);
         const taken = play(decided, [2, { type: 'takeDabb' }]);
         const discarded = play(taken, [
@@ -292,6 +341,10 @@ describe('projectStateFor', () => {
           taken,
           discarded,
           play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }]),
+          meldEverything(play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }])),
+          meldEverything(
+            play(discarded, [2, { type: 'declare', trump: 'eichel', mode: 'abgehen' }]),
+          ),
           play(taken, [SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }]),
         ];
 

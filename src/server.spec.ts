@@ -309,6 +309,81 @@ describe('Socket.IO-Durchstich', () => {
     }
   });
 
+  it('lässt ab dem Spielmacher reihum melden und zeigt die Meldungen allen', async () => {
+    const { players } = await fullRoom();
+    const [anna, ben, cem] = players;
+    await cem.emit('game:intent', { expectedVersion: 1, intent: { type: 'bid', amount: 160 } });
+    await anna.emit('game:intent', { expectedVersion: 2, intent: { type: 'pass' } });
+    await ben.emit('game:intent', { expectedVersion: 3, intent: { type: 'pass' } });
+    await cem.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } });
+    const taken = playerViewSchema.parse(await cem.waitFor('game:state', stateWith(5)));
+    await cem.emit('game:intent', {
+      expectedVersion: 5,
+      intent: { type: 'discardToDabb', cardIds: taken.hand.slice(0, 4).map((card) => card.id) },
+    });
+    await cem.emit('game:intent', {
+      expectedVersion: 6,
+      intent: { type: 'declare', trump: 'herz', mode: 'play' },
+    });
+
+    // Cem meldet als Spielmacher zuerst; das ungemischte Blatt gibt ihm nichts zu melden.
+    await expect(cem.waitFor('game:state', stateWith(7))).resolves.toMatchObject({
+      phase: 'meld',
+      activeSeat: 2,
+      availableActions: [{ type: 'submitMelds', melds: [] }],
+    });
+    const meld = (player: TestClient, expectedVersion: number, meldIds: string[]) =>
+      player.emit('game:intent', { expectedVersion, intent: { type: 'submitMelds', meldIds } });
+    await expect(meld(anna, 7, [])).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'NOT_YOUR_TURN' },
+    });
+    await expect(meld(cem, 7, [])).resolves.toEqual({ ok: true, version: 8 });
+    await expect(meld(anna, 8, ['paar-herz-1'])).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'MELD_NOT_OFFERED' },
+    });
+    await expect(meld(anna, 8, [])).resolves.toEqual({ ok: true, version: 9 });
+
+    // Ben bekommt zwei Paare vorgeschlagen und meldet nur eines.
+    const offer = playerViewSchema.parse(await ben.waitFor('game:state', stateWith(9)));
+    expect(offer.availableActions).toEqual([
+      {
+        type: 'submitMelds',
+        melds: [
+          expect.objectContaining({ id: 'paar-gruen-1', points: 20 }),
+          expect.objectContaining({ id: 'paar-gruen-2', points: 20 }),
+        ],
+      },
+    ]);
+    await expect(meld(ben, 9, ['paar-gruen-1', 'paar-gruen-1'])).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'DUPLICATE_MELDS' },
+    });
+    await expect(meld(ben, 9, ['paar-gruen-1'])).resolves.toEqual({ ok: true, version: 10 });
+
+    const [proposal] = offer.availableActions;
+    if (proposal.type !== 'submitMelds') throw new Error(`Unerwartetes Angebot ${proposal.type}`);
+    const paar = proposal.melds[0];
+    for (const player of [anna, ben, cem]) {
+      const view = playerViewSchema.parse(await player.waitFor('game:state', stateWith(10)));
+      expect(view).toMatchObject({
+        phase: 'trick',
+        melds: [
+          { melds: [], points: 0 },
+          { melds: [paar], points: 20 },
+          { melds: [], points: 0 },
+        ],
+      });
+      await expect(
+        player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 10),
+      ).resolves.toEqual({
+        version: 10,
+        events: [{ type: 'meldsSubmitted', seat: 1, melds: [paar], points: 20 }],
+      });
+    }
+  });
+
   it('beantwortet fehlerhafte Anfragen mit Fehlercodes', async () => {
     const anna = await client();
 

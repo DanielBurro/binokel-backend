@@ -62,7 +62,13 @@ export function concretize(
         trump: SUITS[random(SUITS.length)],
         mode: legal.modes[random(legal.modes.length)],
       };
-    // Wächst mit den Schritten 15–18.
+    case 'submitMelds':
+      // Jede Meldung des Vorschlags mit halber Wahrscheinlichkeit, also auch mal keine.
+      return {
+        type: 'submitMelds',
+        meldIds: legal.melds.filter(() => random(2) === 1).map((meld) => meld.id),
+      };
+    // Wächst mit den Schritten 16–18.
     default:
       throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
   }
