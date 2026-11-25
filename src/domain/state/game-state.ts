@@ -134,7 +134,7 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 17–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; in der Abrechnung und danach niemand. */
 export function activeSeat(state: GameState): Seat | null {
   const { phase, round } = state;
   if (round === null) return null;

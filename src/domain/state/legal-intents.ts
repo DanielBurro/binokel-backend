@@ -9,7 +9,7 @@ import type { LegalIntent } from './intents';
  * Einzige Quelle für die erlaubten Züge eines Sitzes: Sie speist `availableActions` der
  * Projektion und den Zufalls-Bot des Simulationstests. Jeder Zug, den sie anbietet, muss von
  * `applyIntent` angenommen werden, und nur der Sitz aus `activeSeat` bekommt Angebote. Die
- * übrigen Phasen kommen mit den Schritten 17–18 hinzu.
+ * Bestätigung der nächsten Runde kommt mit Schritt 18 hinzu.
  */
 export function legalIntents(state: GameState, seat: Seat): readonly LegalIntent[] {
   const { phase, round } = state;

@@ -62,7 +62,7 @@ function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): 
       return applyMelds(state, seat, intent);
     case 'playCard':
       return applyPlayCard(state, seat, intent);
-    // Die Regeln der übrigen Phasen folgen mit den Schritten 17–18.
+    // Die Bestätigung der nächsten Runde folgt mit Schritt 18.
     default:
       return fail('WRONG_PHASE');
   }
