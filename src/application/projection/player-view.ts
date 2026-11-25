@@ -66,12 +66,15 @@ export interface CompletedTrickView extends TrickView {
 }
 
 export interface PartyResultView {
-  /** Gerundete Stichpunkte, inklusive letztem Stich und gedrückten Augen. */
+  /** Gerundete Stichpunkte, inklusive letztem Stich und gedrückten Augen; 0 beim Abgehen. */
   readonly trickPoints: number;
   readonly meldPoints: number;
   /** false, wenn die Meldepunkte verfallen sind. */
   readonly meldsCounted: boolean;
-  /** Veränderung des Punktestands durch diese Runde; kann negativ sein. */
+  /**
+   * Veränderung des Punktestands durch diese Runde; kann negativ sein. Beim Abgehen enthält sie
+   * für die Gegner die 10 Punkte je Spieler am Tisch.
+   */
   readonly delta: number;
 }
 
@@ -84,7 +87,7 @@ export interface RoundResultView {
 /**
  * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05), ausgelegt auf die
  * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, die Dabb-Karten nur für den
- * Spielmacher nach der Aufnahme. Die Felder ab `roundResult` füllen die Schritte 17–18.
+ * Spielmacher nach der Aufnahme. `readySeats` und `winners` füllt Schritt 18.
  */
 export interface PlayerView {
   readonly version: number;
