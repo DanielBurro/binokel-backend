@@ -48,6 +48,28 @@ export interface CompletedTrick {
   readonly winner: Seat;
 }
 
+/** Wertung einer Partei in einer Runde (Studienarbeit, Phase 7). */
+export interface PartyResult {
+  /** Ungerundete Augen: gewonnene Karten, 10 für den letzten Stich, beim Spielmacher der Dabb. */
+  readonly eyes: number;
+  /** Anzahl der gewonnenen Stiche; der gedrückte Dabb zählt nicht als Stich. */
+  readonly tricksWon: number;
+  /** Augen, auf den nächsten Zehner gerundet. */
+  readonly trickPoints: number;
+  /** Summe der gemeldeten Punkte aller Sitze der Partei. */
+  readonly meldPoints: number;
+  /** false, wenn die Meldepunkte verfallen sind (kein Stich, oder Spielmacher verfehlt). */
+  readonly meldsCounted: boolean;
+  /** Veränderung des Punktestands; kann negativ sein. */
+  readonly delta: number;
+}
+
+export interface RoundResult {
+  readonly outcome: RoundOutcome;
+  /** Nach Partei indiziert. */
+  readonly parties: readonly PartyResult[];
+}
+
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
   readonly highestBid: number;
