@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cardEyes, SUITS, type Card } from '../cards/card';
+import { partyOf, type Seat } from '../rules/parties';
 import { buildDeck } from '../cards/deck';
 import { handSize } from '../config/deal-pattern';
 import {
@@ -13,6 +14,7 @@ import { applyIntent } from './apply-intent';
 import { activeSeat, createGame, DECLARE_MODES, type GameState, type Phase } from './game-state';
 import { SYSTEM } from './intents';
 import { legalIntents } from './legal-intents';
+import { MELD_GROUP, MELD_GROUPS, meldPoints } from '../melds/meld';
 
 /*
  * Simulationstest (Planschritt 32, Abnahme von M2): Ein Zufalls-Bot spielt viele Runden in allen
@@ -53,6 +55,13 @@ function cardsInPlay(state: GameState): Card[] {
   return [...hands.flat(), ...(dabbStatus === 'table' ? dabb : []), ...discarded];
 }
 
+/** Unabhängig von der Engine formuliert: Beim Abgehen meldet die Partei des Spielmachers nicht. */
+function eligible(state: GameState, seat: Seat): boolean {
+  const { declarer, declaration } = state.round!;
+  const n = state.config.playerCount;
+  return declaration!.mode === 'play' || partyOf(seat, n) !== partyOf(declarer!, n);
+}
+
 function checkInvariants(state: GameState, seed: number): void {
   const { config, round } = state;
   const deck = buildDeck(config.deckSize);
@@ -72,6 +81,22 @@ function checkInvariants(state: GameState, seed: number): void {
 
   // Trumpf und Spielart stehen genau ab dem Ende der Ansage fest.
   expect(round!.declaration === null, context).toBe(BEFORE_DECLARATION.has(state.phase));
+
+  // Meldungen: nur Berechtigte, nur eigene Karten, je Gruppe kartendisjunkt, Punkte als Summe.
+  // Bis zum Stichspiel liegen gemeldete Karten noch auf der Hand.
+  round!.melds.forEach((entry, seat) => {
+    if (entry === null) return;
+    expect(eligible(state, seat), context).toBe(true);
+    expect(entry.points, context).toBe(meldPoints(entry.melds));
+    const own = new Set(round!.hands[seat].map((card) => card.id));
+    for (const group of MELD_GROUPS) {
+      const ids = entry.melds
+        .filter((meld) => MELD_GROUP[meld.kind] === group)
+        .flatMap((meld) => meld.cards.map((card) => card.id));
+      expect(new Set(ids).size, context).toBe(ids.length);
+      for (const id of ids) expect(own.has(id), context).toBe(true);
+    }
+  });
 
   // Genau der Sitz aus activeSeat hat Angebote, sonst niemand.
   const offering = round!.hands
@@ -112,6 +137,7 @@ describe('Simulation mit Zufalls-Bot', () => {
     (playerCount, deckSize) => {
       const config = configFor(playerCount, deckSize);
       const declarations = new Set<string>();
+      const meldKinds = new Set<string>();
       for (let round = 0; round < ROUNDS_PER_CONFIG; round++) {
         const seed = playerCount * 100_000 + deckSize * 1_000 + round;
         const end = playRound(config, seed);
@@ -124,10 +150,23 @@ describe('Simulation mit Zufalls-Bot', () => {
         );
         const { trump, mode } = end.round!.declaration!;
         declarations.add(`${trump}/${mode}`);
+
+        // Am Ende hat jeder Berechtigte gemeldet, und nur die.
+        end.round!.melds.forEach((entry, seat) => {
+          expect(entry !== null, `Seed ${seed}, Sitz ${seat}`).toBe(eligible(end, seat));
+          entry?.melds.forEach((meld) => meldKinds.add(meld.kind));
+        });
       }
 
       // Der Bot hat jede Kombination aus Trumpf und Spielart mindestens einmal durchgespielt.
       expect(declarations.size).toBe(SUITS.length * DECLARE_MODES.length);
+      // Die häufigen Meldearten kommen vor; den Diß gibt es nur bei 48 Karten. Die 1000er sind
+      // zu selten für eine feste Erwartung, sie deckt der Property-Test von bestMelds ab.
+      const common = ['paar', 'familie', 'binokel', 'vierGleiche'];
+      expect([...meldKinds]).toEqual(
+        expect.arrayContaining(deckSize === 48 ? [...common, 'diss'] : common),
+      );
+      expect(meldKinds.has('diss')).toBe(deckSize === 48);
     },
   );
 
