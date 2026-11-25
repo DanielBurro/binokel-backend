@@ -57,6 +57,7 @@ function round({
     trick: [],
     tricks,
     result: null,
+    ready: [],
   };
 }
 

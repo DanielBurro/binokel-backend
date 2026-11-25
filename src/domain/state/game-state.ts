@@ -105,6 +105,8 @@ export interface RoundState {
   readonly tricks: readonly CompletedTrick[];
   /** Rundenwertung; null bis zur Abrechnung. */
   readonly result: RoundResult | null;
+  /** Sitze, die nach der Abrechnung die nächste Runde bestätigt haben, in dieser Reihenfolge. */
+  readonly ready: readonly Seat[];
 }
 
 export interface GameState {
@@ -112,7 +114,7 @@ export interface GameState {
   /** Steigt mit jedem erfolgreich angewendeten Intent um eins. */
   readonly version: number;
   readonly phase: Phase;
-  /** Geber der laufenden bzw. der nächsten Runde. */
+  /** Geber der laufenden Runde; rückt erst beim Austeilen der nächsten um einen Sitz weiter. */
   readonly dealer: Seat;
   /** Nach Partei indiziert. */
   readonly scores: readonly number[];

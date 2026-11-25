@@ -499,16 +499,58 @@ describe('applyIntent', () => {
     });
   });
 
-  describe('Züge der übrigen Phasen', () => {
-    const later: PlayerIntent[] = [{ type: 'readyForNextRound' }];
+  describe('Nächste Runde', () => {
+    /** Sitz 1 geht mit 150 ab, die Gegner melden nichts; danach steht die Abrechnung an. */
+    const scored = () => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'abgehen' }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+        [0, { type: 'submitMelds', meldIds: [] }],
+      );
+    };
+    const ready = (seat: number): [Actor, Intent] => [seat, { type: 'readyForNextRound' }];
 
-    it.each(later)('lehnt $type ab, bis die Regeln umgesetzt sind', (intent) => {
-      const bidding = deepFreeze(started());
-      const decided = deepFreeze(play(started(), [2, { type: 'pass' }], [0, { type: 'pass' }]));
+    it('nimmt die Bestätigung jedes Sitzes einmal an, in beliebiger Reihenfolge', () => {
+      const state = play(scored(), ready(2), ready(0));
 
-      expect(applyIntent(bidding, 2, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
-      expect(decided.phase).toBe('dabb');
-      expect(applyIntent(decided, 1, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+      expect(state).toMatchObject({ phase: 'score', version: 10, round: { ready: [2, 0] } });
+      expect(applyIntent(state, 2, ready(2)[1])).toEqual({ ok: false, code: 'ALREADY_READY' });
+    });
+
+    it('teilt nach allen Bestätigungen mit dem nächsten Geber aus und behält die Punkte', () => {
+      const all = deepFreeze(play(scored(), ready(2), ready(0), ready(1)));
+      const result = applyIntent(all, ...startRound());
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: {
+          phase: 'bidding',
+          version: 12,
+          dealer: 1,
+          scores: [30, -150, 30],
+          round: { dealer: 1, forehand: 2, declarer: null, result: null, ready: [] },
+        },
+        events: [{ type: 'roundStarted', dealer: 1, forehand: 2 }],
+      });
+    });
+
+    it('teilt erst aus, wenn alle bestätigt haben', () => {
+      expect(applyIntent(play(scored(), ready(2), ready(0)), ...startRound())).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+    });
+
+    it('nimmt die Bestätigung nur in der Abrechnung an', () => {
+      expect(applyIntent(started(), ...ready(2))).toEqual({ ok: false, code: 'WRONG_PHASE' });
     });
   });
 

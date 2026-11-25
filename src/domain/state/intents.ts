@@ -7,8 +7,7 @@ export const SYSTEM = 'system';
 export type Actor = Seat | typeof SYSTEM;
 
 /**
- * Alle Spielerzüge einer Runde. Die Engine setzt alles bis zum Stichspiel um; die Bestätigung
- * der nächsten Runde folgt mit Schritt 18 und wird bis dahin abgelehnt.
+ * Alle Spielerzüge einer Runde, von der Engine vollständig umgesetzt.
  */
 export type PlayerIntent =
   | { readonly type: 'bid'; readonly amount: number }
@@ -86,6 +85,7 @@ export const INTENT_ERROR_CODES = [
   'DUPLICATE_CARDS',
   'CARD_NOT_IN_HAND',
   'CARD_NOT_ALLOWED',
+  'ALREADY_READY',
   'DUPLICATE_MELDS',
   'MELD_NOT_OFFERED',
 ] as const;

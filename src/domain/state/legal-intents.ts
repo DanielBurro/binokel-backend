@@ -8,8 +8,8 @@ import type { LegalIntent } from './intents';
 /**
  * Einzige Quelle für die erlaubten Züge eines Sitzes: Sie speist `availableActions` der
  * Projektion und den Zufalls-Bot des Simulationstests. Jeder Zug, den sie anbietet, muss von
- * `applyIntent` angenommen werden, und nur der Sitz aus `activeSeat` bekommt Angebote. Die
- * Bestätigung der nächsten Runde kommt mit Schritt 18 hinzu.
+ * `applyIntent` angenommen werden, und nur der Sitz aus `activeSeat` bekommt Angebote. Einzige
+ * Ausnahme ist die Abrechnung: Dort bestätigen alle unabhängig voneinander die nächste Runde.
  */
 export function legalIntents(state: GameState, seat: Seat): readonly LegalIntent[] {
   const { phase, round } = state;
@@ -36,6 +36,9 @@ export function legalIntents(state: GameState, seat: Seat): readonly LegalIntent
     case 'trick':
       if (seat !== nextPlayer(round, state.config.playerCount)) return [];
       return [{ type: 'playCard', cardIds: playableCards(round, seat).map((card) => card.id) }];
+    case 'score':
+      // Hier dürfen alle gleichzeitig handeln: jeder, der die nächste Runde noch nicht bestätigt hat.
+      return round.ready.includes(seat) ? [] : [{ type: 'readyForNextRound' }];
     default:
       return [];
   }

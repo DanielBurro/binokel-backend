@@ -6,6 +6,7 @@ import {
   createRecordingBroadcaster,
   createTestServices,
 } from '../../test/fakes';
+import type { PlayerIntent } from '../../domain/state/intents';
 import type { Room } from '../model/room';
 import { createGameService } from './game-service';
 import { createRoomStore } from './room-store';
@@ -142,6 +143,70 @@ describe('GameService', () => {
       { ok: false, code: 'STALE_STATE' },
     ]);
     expect(room().game).toMatchObject({ version: 2, round: { bidding: { passed: [2] } } });
+  });
+
+  describe('Nächste Runde', () => {
+    /** Spielt die erste Runde per Abgehen bis zur Abrechnung, Sitz 1 hat schon bestätigt. */
+    async function inScore() {
+      const services = await started();
+      const { games, sessions } = services;
+      const move = async (seat: number, intent: PlayerIntent) => {
+        const version = services.room().game!.version;
+        const result = await games.executeMove({
+          sessionId: sessions[seat],
+          expectedVersion: version,
+          intent,
+        });
+        if (!result.ok) throw new Error(result.code);
+        return result;
+      };
+      await move(2, { type: 'pass' });
+      await move(0, { type: 'pass' });
+      await move(1, { type: 'takeDabb' });
+      const hand = services.room().game!.round!.hands[1];
+      await move(1, { type: 'discardToDabb', cardIds: hand.slice(0, 4).map((card) => card.id) });
+      await move(1, { type: 'declare', trump: 'herz', mode: 'abgehen' });
+      await move(2, { type: 'submitMelds', meldIds: [] });
+      await move(0, { type: 'submitMelds', meldIds: [] });
+      await move(1, { type: 'readyForNextRound' });
+      services.messages.length = 0;
+      return { ...services, move };
+    }
+
+    it('wartet, bis alle die nächste Runde bestätigt haben', async () => {
+      const { move, room } = await inScore();
+
+      await expect(move(0, { type: 'readyForNextRound' })).resolves.toEqual({
+        ok: true,
+        version: 10,
+      });
+      expect(room().game).toMatchObject({ phase: 'score', round: { ready: [1, 0] } });
+    });
+
+    it('teilt nach der letzten Bestätigung frisch gemischt mit dem nächsten Geber aus', async () => {
+      const { move, room, messages } = await inScore();
+      await move(0, { type: 'readyForNextRound' });
+      messages.length = 0;
+
+      // Das Ack nennt die Version nach dem Austeilen.
+      await expect(move(2, { type: 'readyForNextRound' })).resolves.toEqual({
+        ok: true,
+        version: 12,
+      });
+      expect(room().game).toMatchObject({
+        phase: 'bidding',
+        dealer: 1,
+        scores: [30, -150, 30],
+        round: { dealer: 1, forehand: 2, ready: [] },
+      });
+      const batches = messages.flatMap((message) =>
+        message.kind === 'gameEvents' ? [message.batch] : [],
+      );
+      expect(batches).toEqual([
+        { version: 11, events: [{ type: 'playerReady', seat: 2 }] },
+        { version: 12, events: [{ type: 'roundStarted', dealer: 1, forehand: 2 }] },
+      ]);
+    });
   });
 
   describe('System-Intents', () => {

@@ -501,7 +501,7 @@ describe('Socket.IO-Durchstich', () => {
         expect(view).toMatchObject({
           phase: 'score',
           activeSeat: null,
-          availableActions: [],
+          availableActions: [{ type: 'readyForNextRound' }],
           // Gegner: Meldepunkte plus 3 · 10, Spielmacher: −Reizwert.
           roundResult: {
             outcome: 'abgehen',

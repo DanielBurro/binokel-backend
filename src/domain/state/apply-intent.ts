@@ -2,12 +2,13 @@ import type { Card } from '../cards/card';
 import { buildDeck } from '../cards/deck';
 import type { DeckSize } from '../config/game-config';
 import { deal, forehandOf } from '../rules/deal';
-import { isSeat, type Seat } from '../rules/parties';
+import { isSeat, nextSeat, type Seat } from '../rules/parties';
 import { bid, openBidding, pass } from './bidding';
 import { discardToDabb, takeDabb } from './dabb';
 import { declare } from './declare';
 import { nextMelder, submitMelds } from './melding';
 import { winningParty } from './game-end';
+import { everyoneReady, markReady } from './next-round';
 import { scoreRound } from './scoring';
 import { playCard } from './trick-play';
 import { nextPhase, type AbortReason, type GameState, type RoundState } from './game-state';
@@ -63,10 +64,17 @@ function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): 
       return applyMelds(state, seat, intent);
     case 'playCard':
       return applyPlayCard(state, seat, intent);
-    // Die Bestätigung der nächsten Runde folgt mit Schritt 18.
-    default:
-      return fail('WRONG_PHASE');
+    case 'readyForNextRound':
+      return applyReady(state, seat);
   }
+}
+
+function applyReady(state: GameState, seat: Seat): IntentResult {
+  const { round } = state;
+  if (state.phase !== 'score' || round === null) return fail('WRONG_PHASE');
+  const result = markReady(round, seat);
+  if (!result.ok) return result;
+  return commit(state, { round: result.round }, result.events);
 }
 
 function applyDabb(
@@ -190,11 +198,16 @@ function applyBidding(
   );
 }
 
-// Ab Schritt 18 startet die nächste Runde auch nach der Abrechnung.
+/**
+ * Teilt die erste Runde aus, oder nach der Abrechnung die nächste, sobald alle bestätigt haben.
+ * Dann rückt der Geber um einen Sitz in Spielrichtung weiter (FA-07); die Punktestände bleiben.
+ */
 function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResult {
-  if (state.phase !== 'created') return fail('WRONG_PHASE');
-  const { config, dealer } = state;
+  const { config } = state;
+  const next = everyoneReady(state);
+  if (state.phase !== 'created' && !next) return fail('WRONG_PHASE');
   if (!isCompleteDeck(shuffledDeck, config.deckSize)) return fail('INVALID_DECK');
+  const dealer = next ? nextSeat(state.dealer, config.playerCount) : state.dealer;
 
   const { hands, dabb } = deal(shuffledDeck, config, dealer);
   const forehand = forehandOf(dealer, config.playerCount);
@@ -202,6 +215,7 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
     state,
     {
       phase: 'bidding',
+      dealer,
       round: {
         dealer,
         forehand,
@@ -216,6 +230,7 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
         trick: [],
         tricks: [],
         result: null,
+        ready: [],
       },
     },
     [{ type: 'roundStarted', dealer, forehand }],

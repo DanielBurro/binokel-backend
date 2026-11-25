@@ -70,9 +70,8 @@ export function concretize(
       };
     case 'playCard':
       return { type: 'playCard', cardId: legal.cardIds[random(legal.cardIds.length)] };
-    // Wächst mit Schritt 18.
-    default:
-      throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
+    case 'readyForNextRound':
+      return { type: 'readyForNextRound' };
   }
 }
 

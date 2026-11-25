@@ -122,12 +122,17 @@ function checkInvariants(state: GameState, seed: number): void {
     }
   });
 
-  // Genau der Sitz aus activeSeat hat Angebote, sonst niemand.
-  const offering = round!.hands
-    .map((_, seat) => seat)
-    .filter((seat) => legalIntents(state, seat).length > 0);
+  // Genau der Sitz aus activeSeat hat Angebote, sonst niemand. In der Abrechnung ist niemand
+  // allein am Zug, dort bestätigt jeder, der es noch nicht getan hat, die nächste Runde.
+  const seats = round!.hands.map((_, seat) => seat);
+  const offering = seats.filter((seat) => legalIntents(state, seat).length > 0);
   const active = activeSeat(state);
-  expect(offering, context).toEqual(active === null ? [] : [active]);
+  if (state.phase === 'score') {
+    expect(active, context).toBeNull();
+    expect(offering, context).toEqual(seats.filter((seat) => !round!.ready.includes(seat)));
+  } else {
+    expect(offering, context).toEqual(active === null ? [] : [active]);
+  }
 }
 
 /**

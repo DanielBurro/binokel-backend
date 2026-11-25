@@ -458,6 +458,7 @@
                   "DUPLICATE_CARDS",
                   "CARD_NOT_IN_HAND",
                   "CARD_NOT_ALLOWED",
+                  "ALREADY_READY",
                   "DUPLICATE_MELDS",
                   "MELD_NOT_OFFERED",
                   "STALE_STATE",
