@@ -86,23 +86,41 @@ describe('legalIntents', () => {
     ]);
   });
 
-  it('bietet nach dem Drücken und nach einem Abbruch nichts mehr an', () => {
+  /** Sitz 2 bietet 1000, nimmt auf und drückt; danach steht die Ansage an. */
+  function discarded(): GameState {
     const decided = ok(applyIntent(started(config, 0), 2, { type: 'bid', amount: MAX_BID }));
     const taken = ok(applyIntent(decided, 2, { type: 'takeDabb' }));
-    const discarded = ok(
+    return ok(
       applyIntent(taken, 2, {
         type: 'discardToDabb',
         cardIds: taken.round!.hands[2].slice(0, 4).map((card) => card.id),
       }),
     );
-    const aborted = ok(
-      applyIntent(started(config, 0), SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
-    );
+  }
 
-    for (const state of [discarded, aborted]) {
-      expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
-    }
+  it('bietet nach dem Drücken nur dem Spielmacher die Ansage mit beiden Spielarten an', () => {
+    const state = discarded();
+
+    expect(seatsOf(state).map((seat) => legalIntents(state, seat))).toEqual([
+      [],
+      [],
+      [{ type: 'declare', modes: ['play', 'abgehen'] }],
+    ]);
   });
+
+  it.each(['play', 'abgehen'] as const)(
+    'bietet nach der Ansage (%s) und nach einem Abbruch nichts mehr an',
+    (mode) => {
+      const declared = ok(applyIntent(discarded(), 2, { type: 'declare', trump: 'gruen', mode }));
+      const aborted = ok(
+        applyIntent(started(config, 0), SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
+      );
+
+      for (const state of [declared, aborted]) {
+        expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
+      }
+    },
+  );
 
   describe('Übereinstimmung mit applyIntent', () => {
     const configs = fc.constantFrom(
@@ -120,8 +138,8 @@ describe('legalIntents', () => {
           let state = started(anyConfig, rawDealer % anyConfig.playerCount);
 
           // Am Ende passen alle, damit das Reizen sicher entschieden wird; danach bleiben je
-          // ein Zug für Aufnehmen und Drücken.
-          const passes = Array.from({ length: anyConfig.playerCount + 2 }, (): [number, number] => [
+          // ein Zug für Aufnehmen, Drücken und Ansage.
+          const passes = Array.from({ length: anyConfig.playerCount + 3 }, (): [number, number] => [
             1, 0,
           ]);
           for (const [which, value] of [...list, ...passes]) {
@@ -150,10 +168,11 @@ describe('legalIntents', () => {
           }
 
           expect(activeSeat(state)).toBeNull();
-          // Kein Deadlock: Bietet niemand mehr etwas an, ist der Dabb gedrückt. Die Ansage
-          // folgt mit Schritt 14.
-          expect(state.phase).toBe('declare');
+          // Kein Deadlock: Bietet niemand mehr etwas an, ist angesagt. Das Melden folgt mit
+          // Schritt 15.
+          expect(state.phase).toBe('meld');
           expect(state.round?.dabbStatus).toBe('discarded');
+          expect(state.round?.declaration).not.toBeNull();
         }),
       );
     });

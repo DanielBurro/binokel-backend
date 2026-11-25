@@ -243,7 +243,7 @@ describe('Socket.IO-Durchstich', () => {
     await expect(cem.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
       phase: 'declare',
       dabb: { size: 4, status: 'discarded', cards: pressed },
-      availableActions: [],
+      availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
     });
     for (const other of [anna, ben]) {
       await expect(other.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
@@ -253,6 +253,59 @@ describe('Socket.IO-Durchstich', () => {
       await expect(
         other.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 6),
       ).resolves.toEqual({ version: 6, events: [{ type: 'dabbDiscarded', seat: 2 }] });
+    }
+  });
+
+  it('lässt den Spielmacher Trumpf und Spielart ansagen und zeigt sie allen', async () => {
+    const { players } = await fullRoom();
+    const [anna, ben, cem] = players;
+    await cem.emit('game:intent', { expectedVersion: 1, intent: { type: 'bid', amount: 160 } });
+    await anna.emit('game:intent', { expectedVersion: 2, intent: { type: 'pass' } });
+    await ben.emit('game:intent', { expectedVersion: 3, intent: { type: 'pass' } });
+    await cem.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } });
+    const taken = playerViewSchema.parse(await cem.waitFor('game:state', stateWith(5)));
+    await cem.emit('game:intent', {
+      expectedVersion: 5,
+      intent: { type: 'discardToDabb', cardIds: taken.hand.slice(0, 4).map((card) => card.id) },
+    });
+    await expect(cem.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
+      phase: 'declare',
+      activeSeat: 2,
+      declaration: null,
+      availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
+    });
+
+    await expect(
+      cem.emit('game:intent', {
+        expectedVersion: 6,
+        intent: { type: 'declare', trump: 'pik', mode: 'play' },
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_PAYLOAD' } });
+    await expect(
+      anna.emit('game:intent', {
+        expectedVersion: 6,
+        intent: { type: 'declare', trump: 'herz', mode: 'play' },
+      }),
+    ).resolves.toMatchObject({ ok: false, error: { code: 'NOT_YOUR_TURN' } });
+    await expect(
+      cem.emit('game:intent', {
+        expectedVersion: 6,
+        intent: { type: 'declare', trump: 'herz', mode: 'abgehen' },
+      }),
+    ).resolves.toEqual({ ok: true, version: 7 });
+
+    for (const player of [anna, ben, cem]) {
+      const view = playerViewSchema.parse(await player.waitFor('game:state', stateWith(7)));
+      expect(view).toMatchObject({
+        phase: 'meld',
+        declaration: { trump: 'herz', mode: 'abgehen' },
+      });
+      await expect(
+        player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 7),
+      ).resolves.toEqual({
+        version: 7,
+        events: [{ type: 'declared', seat: 2, trump: 'herz', mode: 'abgehen' }],
+      });
     }
   });
 

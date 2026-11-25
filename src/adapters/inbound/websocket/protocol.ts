@@ -95,7 +95,7 @@ const gameConfigSchema = shared(
   }) satisfies z.ZodType<GameConfig>,
 );
 
-/** Alle Züge einer Runde; die Engine setzt bisher Reizen und Dabb um (Schritte 14–18). */
+/** Alle Züge einer Runde; die Engine kann bisher Reizen, Dabb und Ansage (Rest: 15–18). */
 const playerIntentSchema = client(
   'PlayerIntent',
   exhaustive<PlayerIntent>()(
@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `declaration` füllen die Schritte 14–18. */
+/** Auf die ganze Runde ausgelegt; die Felder ab `melds` füllen die Schritte 15–18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

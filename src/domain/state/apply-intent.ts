@@ -5,6 +5,7 @@ import { deal, forehandOf } from '../rules/deal';
 import { isSeat, type Seat } from '../rules/parties';
 import { bid, openBidding, pass } from './bidding';
 import { discardToDabb, takeDabb } from './dabb';
+import { declare } from './declare';
 import { nextPhase, type AbortReason, type GameState } from './game-state';
 import {
   SYSTEM,
@@ -52,7 +53,9 @@ function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): 
     case 'takeDabb':
     case 'discardToDabb':
       return applyDabb(state, seat, intent);
-    // Die Regeln der übrigen Phasen folgen mit den Schritten 14–18.
+    case 'declare':
+      return applyDeclare(state, seat, intent);
+    // Die Regeln der übrigen Phasen folgen mit den Schritten 15–18.
     default:
       return fail('WRONG_PHASE');
   }
@@ -76,6 +79,20 @@ function applyDabb(
     { phase: done ? nextPhase(state) : state.phase, round: result.round },
     result.events,
   );
+}
+
+function applyDeclare(
+  state: GameState,
+  seat: Seat,
+  intent: Extract<PlayerIntent, { type: 'declare' }>,
+): IntentResult {
+  const { round } = state;
+  if (state.phase !== 'declare' || round === null) return fail('WRONG_PHASE');
+
+  const result = declare(round, seat, { trump: intent.trump, mode: intent.mode });
+  if (!result.ok) return result;
+  // Auch beim Abgehen folgt das Melden; dort melden nur die Gegenparteien (Schritt 15).
+  return commit(state, { phase: nextPhase(state), round: result.round }, result.events);
 }
 
 function applyBidding(
@@ -129,6 +146,7 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
         discarded: [],
         bidding: openBidding(forehand, config.playerCount),
         declarer: null,
+        declaration: null,
       },
     },
     [{ type: 'roundStarted', dealer, forehand }],

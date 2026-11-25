@@ -21,6 +21,7 @@ function round(overrides: Partial<RoundState> = {}): RoundState {
     discarded: [],
     bidding: { highestBid: 150, highestBidder: 1, passed: [2, 0], activeSeat: null },
     declarer: 1,
+    declaration: null,
     ...overrides,
   };
 }

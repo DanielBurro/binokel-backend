@@ -40,8 +40,10 @@ export function projectStateFor(
       : null,
     declarer: round?.declarer ?? null,
     dabb: round ? projectDabb(round, seat) : null,
-    // Ansage, Meldungen, Stiche, Abrechnung und Spielende füllen die Schritte 14–18.
-    declaration: null,
+    declaration: round?.declaration
+      ? { trump: round.declaration.trump, mode: round.declaration.mode }
+      : null,
+    // Meldungen, Stiche, Abrechnung und Spielende füllen die Schritte 15–18.
     melds: seats.map(() => null),
     trick: null,
     lastTrick: null,

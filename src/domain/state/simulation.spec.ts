@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardEyes, type Card } from '../cards/card';
+import { cardEyes, SUITS, type Card } from '../cards/card';
 import { buildDeck } from '../cards/deck';
 import { handSize } from '../config/deal-pattern';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../config/game-config';
 import { chooseMove, seededRandom, shuffle } from '../../test/random-bot';
 import { applyIntent } from './apply-intent';
-import { activeSeat, createGame, type GameState, type Phase } from './game-state';
+import { activeSeat, createGame, DECLARE_MODES, type GameState, type Phase } from './game-state';
 import { SYSTEM } from './intents';
 import { legalIntents } from './legal-intents';
 
@@ -20,12 +20,14 @@ import { legalIntents } from './legal-intents';
  * bis er ganze Partien bis zum Spielende spielt.
  */
 
-/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 14 rückt das weiter. */
-const LAST_REACHABLE_PHASE: Phase = 'declare';
+/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 15 rückt das weiter. */
+const LAST_REACHABLE_PHASE: Phase = 'meld';
 const ROUNDS_PER_CONFIG = 500;
 /** Obergrenze gegen Endlosschleifen; eine Runde braucht bisher höchstens rund 100 Züge. */
 const MAX_MOVES = 500;
 const DECK_EYES = 240;
+/** Phasen, in denen noch nicht angesagt ist. */
+const BEFORE_DECLARATION: ReadonlySet<Phase> = new Set(['bidding', 'dabb', 'declare']);
 
 const configs: [PlayerCount, DeckSize][] = [
   [3, 40],
@@ -63,6 +65,9 @@ function checkInvariants(state: GameState, seed: number): void {
   round!.hands.forEach((hand, seat) => {
     if (seat !== round!.declarer) expect(hand, context).toHaveLength(handSize(config));
   });
+
+  // Trumpf und Spielart stehen genau ab dem Ende der Ansage fest.
+  expect(round!.declaration === null, context).toBe(BEFORE_DECLARATION.has(state.phase));
 
   // Genau der Sitz aus activeSeat hat Angebote, sonst niemand.
   const offering = round!.hands
@@ -102,6 +107,7 @@ describe('Simulation mit Zufalls-Bot', () => {
     'spielt bei %i Spielern und %i Karten jede Runde ohne Invariantenverletzung durch',
     (playerCount, deckSize) => {
       const config = configFor(playerCount, deckSize);
+      const declarations = new Set<string>();
       for (let round = 0; round < ROUNDS_PER_CONFIG; round++) {
         const seed = playerCount * 100_000 + deckSize * 1_000 + round;
         const end = playRound(config, seed);
@@ -112,7 +118,12 @@ describe('Simulation mit Zufalls-Bot', () => {
         expect(end.round!.hands[end.round!.declarer!], `Seed ${seed}`).toHaveLength(
           handSize(config),
         );
+        const { trump, mode } = end.round!.declaration!;
+        declarations.add(`${trump}/${mode}`);
       }
+
+      // Der Bot hat jede Kombination aus Trumpf und Spielart mindestens einmal durchgespielt.
+      expect(declarations.size).toBe(SUITS.length * DECLARE_MODES.length);
     },
   );
 
