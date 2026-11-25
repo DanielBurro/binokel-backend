@@ -34,6 +34,7 @@ function round(playerCount: PlayerCount, mode: DeclareMode = 'play'): RoundState
     trick: [],
     tricks: [],
     result: null,
+    ready: [],
   };
 }
 

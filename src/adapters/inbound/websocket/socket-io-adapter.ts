@@ -33,6 +33,7 @@ export const ERROR_MESSAGES: Readonly<Record<ProtocolErrorCode, string>> = {
   DUPLICATE_CARDS: 'Jede Karte darf nur einmal angegeben werden.',
   CARD_NOT_IN_HAND: 'Diese Karte ist nicht auf deiner Hand.',
   CARD_NOT_ALLOWED: 'Diese Karte ist nicht erlaubt (Farb-, Stich- oder Trumpfzwang).',
+  ALREADY_READY: 'Du hast die nächste Runde bereits bestätigt.',
   DUPLICATE_MELDS: 'Jede Meldung darf nur einmal angegeben werden.',
   MELD_NOT_OFFERED: 'Diese Meldung wurde dir nicht angeboten.',
   STALE_STATE: 'Der Spielstand hat sich inzwischen geändert.',

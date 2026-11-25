@@ -1,7 +1,7 @@
 import type { Card, Suit } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import type { Meld } from '../melds/meld';
-import { assertSeat, partyCount, type Seat } from '../rules/parties';
+import { assertSeat, partyCount, type PartyId, type Seat } from '../rules/parties';
 import type { TrickPlay } from '../rules/trick';
 import { nextMelder } from './melding';
 import { nextPlayer } from './trick-play';
@@ -105,6 +105,8 @@ export interface RoundState {
   readonly tricks: readonly CompletedTrick[];
   /** Rundenwertung; null bis zur Abrechnung. */
   readonly result: RoundResult | null;
+  /** Sitze, die nach der Abrechnung die nächste Runde bestätigt haben, in dieser Reihenfolge. */
+  readonly ready: readonly Seat[];
 }
 
 export interface GameState {
@@ -112,13 +114,15 @@ export interface GameState {
   /** Steigt mit jedem erfolgreich angewendeten Intent um eins. */
   readonly version: number;
   readonly phase: Phase;
-  /** Geber der laufenden bzw. der nächsten Runde. */
+  /** Geber der laufenden Runde; rückt erst beim Austeilen der nächsten um einen Sitz weiter. */
   readonly dealer: Seat;
   /** Nach Partei indiziert. */
   readonly scores: readonly number[];
   /** null bis zur ersten Runde. */
   readonly round: RoundState | null;
   readonly abortReason: AbortReason | null;
+  /** Siegerpartei nach regulärem Spielende, als Liste mit genau einem Eintrag; sonst null. */
+  readonly winners: readonly PartyId[] | null;
 }
 
 export function createGame(config: GameConfig, firstDealer: Seat): GameState {
@@ -131,10 +135,11 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
     scores: Array.from({ length: partyCount(config.playerCount) }, () => 0),
     round: null,
     abortReason: null,
+    winners: null,
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 17–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; in der Abrechnung und danach niemand. */
 export function activeSeat(state: GameState): Seat | null {
   const { phase, round } = state;
   if (round === null) return null;

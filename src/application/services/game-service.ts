@@ -1,8 +1,8 @@
 import { buildDeck } from '../../domain/cards/deck';
-import type { Seat } from '../../domain/rules/parties';
 import { applyIntent } from '../../domain/state/apply-intent';
 import { createGame, type AbortReason, type GameState } from '../../domain/state/game-state';
 import { SYSTEM, type SystemIntent } from '../../domain/state/intents';
+import { everyoneReady } from '../../domain/state/next-round';
 import type { Room } from '../model/room';
 import type { ExecuteMovePort, MoveExecuted } from '../ports/inbound/execute-move.port';
 import { failure, type ServiceFailure } from '../ports/inbound/service-error';
@@ -11,10 +11,10 @@ import type { ShufflerPort } from '../ports/outbound/shuffler.port';
 import { publishRoom } from './publish-room';
 import type { RoomStore } from './room-store';
 
-/** Wer die erste Runde gibt; der Raumersteller sitzt auf Sitz 0. */
-export const FIRST_DEALER: Seat = 0;
-
-/** Der GameService ist der einzige Erzeuger von System-Intents. */
+/**
+ * Der GameService ist der einzige Erzeuger von System-Intents: `startRound` beim Spielstart und
+ * sobald alle die nächste Runde bestätigt haben, `abortGame` beim Verlassen eines Spiels.
+ */
 export interface GameService extends ExecuteMovePort {
   /** Teilt die erste Runde aus. Nur unter der Sperre des Raums aufrufen. */
   startGame(room: Room): Promise<Room>;
@@ -57,7 +57,15 @@ export function createGameService({ store, broadcaster, shuffler }: GameServiceD
 
           const saved = await store.save({ ...room, game: result.state });
           publishRoom(broadcaster, saved, result.events);
-          return { ok: true, version: result.state.version };
+          if (!everyoneReady(result.state)) return { ok: true, version: result.state.version };
+
+          // Alle haben die nächste Runde bestätigt: frisch mischen und austeilen. Das Ack nennt
+          // die Version nach dem Austeilen, damit der nächste Zug darauf aufsetzen kann.
+          const dealt = await applySystemIntent(saved, result.state, {
+            type: 'startRound',
+            shuffledDeck: shuffler.shuffle(buildDeck(room.config.deckSize)),
+          });
+          return { ok: true, version: dealt.game!.version };
         },
       );
     },
@@ -66,7 +74,11 @@ export function createGameService({ store, broadcaster, shuffler }: GameServiceD
       if (room.game !== null) {
         throw new Error(`Spiel in Raum ${room.id} läuft bereits`);
       }
-      const game = createGame(room.config, FIRST_DEALER);
+      // Studienarbeit FA-07: Den Geber der ersten Runde bestimmt der Zufall. Gemischt wird über
+      // denselben Port wie das Blatt, also kryptografisch.
+      const seats = Array.from({ length: room.config.playerCount }, (_, seat) => seat);
+      const [firstDealer] = shuffler.shuffle(seats);
+      const game = createGame(room.config, firstDealer);
       const shuffledDeck = shuffler.shuffle(buildDeck(room.config.deckSize));
       return applySystemIntent(room, game, { type: 'startRound', shuffledDeck });
     },

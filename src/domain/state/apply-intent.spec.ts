@@ -343,6 +343,70 @@ describe('applyIntent', () => {
     });
   });
 
+  describe('Spielende', () => {
+    /** Sitz 1 geht mit 150 ab; Sitz 2 und Sitz 0 melden nichts und bekommen je 30. */
+    const abgehenWith = (scores: number[]) => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      const declared = play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'abgehen' }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+      );
+      return applyIntent(deepFreeze({ ...declared, scores }), 0, {
+        type: 'submitMelds',
+        meldIds: [],
+      });
+    };
+
+    it('endet, sobald eine Partei allein vorn mindestens 1000 Punkte hat', () => {
+      const result = abgehenWith([980, 400, 900]);
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { phase: 'terminated', scores: [1010, 250, 930], winners: [0], abortReason: null },
+        events: [
+          { type: 'meldsSubmitted', seat: 0 },
+          { type: 'roundScored', outcome: 'abgehen' },
+          { type: 'gameFinished', winners: [0] },
+        ],
+      });
+      // Die Wertung der letzten Runde bleibt sichtbar.
+      expect(result.ok && result.state.round!.result?.outcome).toBe('abgehen');
+    });
+
+    it('spielt bei geteilter Spitze über 1000 weiter', () => {
+      const result = abgehenWith([980, 400, 980]);
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { phase: 'score', scores: [1010, 250, 1010], winners: null },
+      });
+      expect(result.ok && result.events.map((event) => event.type)).toEqual([
+        'meldsSubmitted',
+        'roundScored',
+      ]);
+    });
+
+    it('nimmt nach dem Spielende keine Züge mehr an', () => {
+      const result = abgehenWith([980, 400, 900]);
+      if (!result.ok) throw new Error(result.code);
+
+      expect(applyIntent(result.state, 0, { type: 'readyForNextRound' })).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+      expect(
+        applyIntent(result.state, SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
+      ).toEqual({ ok: false, code: 'WRONG_PHASE' });
+    });
+  });
+
   describe('Stichspiel', () => {
     /** Sitz 1 ist Spielmacher mit Herz-Trumpf, alle haben ohne Meldung durchgewunken. */
     const inTricks = () => {
@@ -435,16 +499,58 @@ describe('applyIntent', () => {
     });
   });
 
-  describe('Züge der übrigen Phasen', () => {
-    const later: PlayerIntent[] = [{ type: 'readyForNextRound' }];
+  describe('Nächste Runde', () => {
+    /** Sitz 1 geht mit 150 ab, die Gegner melden nichts; danach steht die Abrechnung an. */
+    const scored = () => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'abgehen' }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+        [0, { type: 'submitMelds', meldIds: [] }],
+      );
+    };
+    const ready = (seat: number): [Actor, Intent] => [seat, { type: 'readyForNextRound' }];
 
-    it.each(later)('lehnt $type ab, bis die Regeln umgesetzt sind', (intent) => {
-      const bidding = deepFreeze(started());
-      const decided = deepFreeze(play(started(), [2, { type: 'pass' }], [0, { type: 'pass' }]));
+    it('nimmt die Bestätigung jedes Sitzes einmal an, in beliebiger Reihenfolge', () => {
+      const state = play(scored(), ready(2), ready(0));
 
-      expect(applyIntent(bidding, 2, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
-      expect(decided.phase).toBe('dabb');
-      expect(applyIntent(decided, 1, intent)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+      expect(state).toMatchObject({ phase: 'score', version: 10, round: { ready: [2, 0] } });
+      expect(applyIntent(state, 2, ready(2)[1])).toEqual({ ok: false, code: 'ALREADY_READY' });
+    });
+
+    it('teilt nach allen Bestätigungen mit dem nächsten Geber aus und behält die Punkte', () => {
+      const all = deepFreeze(play(scored(), ready(2), ready(0), ready(1)));
+      const result = applyIntent(all, ...startRound());
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: {
+          phase: 'bidding',
+          version: 12,
+          dealer: 1,
+          scores: [30, -150, 30],
+          round: { dealer: 1, forehand: 2, declarer: null, result: null, ready: [] },
+        },
+        events: [{ type: 'roundStarted', dealer: 1, forehand: 2 }],
+      });
+    });
+
+    it('teilt erst aus, wenn alle bestätigt haben', () => {
+      expect(applyIntent(play(scored(), ready(2), ready(0)), ...startRound())).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+    });
+
+    it('nimmt die Bestätigung nur in der Abrechnung an', () => {
+      expect(applyIntent(started(), ...ready(2))).toEqual({ ok: false, code: 'WRONG_PHASE' });
     });
   });
 

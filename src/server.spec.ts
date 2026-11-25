@@ -10,6 +10,8 @@ import {
 import type { PlayerView } from './application/projection/player-view';
 import type { RoomView } from './application/projection/room-view';
 import type { GameEventBatch } from './application/ports/outbound/game-broadcaster.port';
+import type { ShufflerPort } from './application/ports/outbound/shuffler.port';
+import { makeCard, SUITS, type Card } from './domain/cards/card';
 import { buildDeck } from './domain/cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from './domain/config/game-config';
 import { deal } from './domain/rules/deal';
@@ -501,7 +503,7 @@ describe('Socket.IO-Durchstich', () => {
         expect(view).toMatchObject({
           phase: 'score',
           activeSeat: null,
-          availableActions: [],
+          availableActions: [{ type: 'readyForNextRound' }],
           // Gegner: Meldepunkte plus 3 · 10, Spielmacher: −Reizwert.
           roundResult: {
             outcome: 'abgehen',
@@ -563,6 +565,160 @@ describe('Socket.IO-Durchstich', () => {
           ],
         });
       }
+    });
+  });
+
+  describe('Spielende', () => {
+    /**
+     * Spielt mit einfacher Strategie, bis das Spiel endet: passen, Dabb aufnehmen und die ersten
+     * Karten drücken, abgehen, alles Angebotene melden, die nächste Runde bestätigen. Der Raum
+     * nutzt den Mischer, der nicht mischt; jede Runde bekommt also dasselbe Blatt.
+     */
+    async function playUntil(
+      players: TestClient[],
+      startVersion: number,
+      done: (view: PlayerView) => boolean,
+    ): Promise<PlayerView[]> {
+      let version = startVersion;
+      for (let step = 0; step < 2_000; step++) {
+        const views = await Promise.all(
+          players.map(async (player) =>
+            playerViewSchema.parse(await player.waitFor('game:state', stateWith(version))),
+          ),
+        );
+        if (done(views[0])) return views;
+        const seat = views.findIndex((view) => view.availableActions.length > 0);
+        const [offer] = views[seat].availableActions;
+        const intent =
+          offer.type === 'bid'
+            ? { type: 'pass' }
+            : offer.type === 'discardToDabb'
+              ? {
+                  type: 'discardToDabb',
+                  cardIds: views[seat].hand.slice(0, offer.count).map((c) => c.id),
+                }
+              : offer.type === 'declare'
+                ? { type: 'declare', trump: 'herz', mode: 'abgehen' }
+                : offer.type === 'submitMelds'
+                  ? { type: 'submitMelds', meldIds: offer.melds.map((meld) => meld.id) }
+                  : { type: offer.type };
+        const ack = intentAckSchema.parse(
+          await players[seat].emit('game:intent', { expectedVersion: version, intent }),
+        );
+        if (!ack.ok) throw new Error(`${offer.type} abgelehnt: ${ack.error.code}`);
+        version = ack.version;
+      }
+      throw new Error('Kein Ende nach 2000 Zügen');
+    }
+
+    it('teilt nach allen Bestätigungen die nächste Runde mit dem nächsten Geber aus', async () => {
+      const { players } = await fullRoom();
+      const [anna, ben, cem] = players;
+      const scored = await playUntil(players, 1, (view) => view.phase === 'score');
+      expect(scored[0]).toMatchObject({
+        dealer: 0,
+        readySeats: [],
+        availableActions: [{ type: 'readyForNextRound' }],
+      });
+      const version = scored[0].version;
+
+      await expect(
+        anna.emit('game:intent', {
+          expectedVersion: version,
+          intent: { type: 'readyForNextRound' },
+        }),
+      ).resolves.toEqual({ ok: true, version: version + 1 });
+      await expect(
+        anna.emit('game:intent', {
+          expectedVersion: version + 1,
+          intent: { type: 'readyForNextRound' },
+        }),
+      ).resolves.toMatchObject({ ok: false, error: { code: 'ALREADY_READY' } });
+      await expect(ben.waitFor('game:state', stateWith(version + 1))).resolves.toMatchObject({
+        readySeats: [0],
+        availableActions: [{ type: 'readyForNextRound' }],
+      });
+      await ben.emit('game:intent', {
+        expectedVersion: version + 1,
+        intent: { type: 'readyForNextRound' },
+      });
+
+      // Die letzte Bestätigung teilt gleich aus; das Ack nennt die Version nach dem Austeilen.
+      await expect(
+        cem.emit('game:intent', {
+          expectedVersion: version + 2,
+          intent: { type: 'readyForNextRound' },
+        }),
+      ).resolves.toEqual({ ok: true, version: version + 4 });
+      for (const player of players) {
+        const view = playerViewSchema.parse(
+          await player.waitFor('game:state', stateWith(version + 4)),
+        );
+        expect(view).toMatchObject({
+          phase: 'bidding',
+          dealer: 1,
+          forehand: 2,
+          activeSeat: 0,
+          readySeats: [],
+          roundResult: null,
+          scores: scored[0].scores,
+        });
+        await expect(
+          player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === version + 4),
+        ).resolves.toEqual({
+          version: version + 4,
+          events: [{ type: 'roundStarted', dealer: 1, forehand: 2 }],
+        });
+      }
+    });
+
+    it('spielt Runde um Runde, bis eine Partei allein vorn 1000 Punkte hat', async () => {
+      // Mit immer gleichem Blatt und ständigem Abgehen würde niemand 1000 erreichen. Der Mischer
+      // gibt deshalb dem Sitz nach der Vorhand jede Runde Vier Asse, Vier Könige und Vier Ober
+      // (240 Meldepunkte). Da die Vorhand mit dem Geber wandert, bekommt jeder Sitz sie reihum.
+      const second = deal(buildDeck(40), config, 0).hands[2];
+      const deckIndex = new Map(buildDeck(40).map((card, index) => [card.id, index]));
+      const slots = second.map((card) => deckIndex.get(card.id)!);
+      const stacked = (['ass', 'koenig', 'ober'] as const).flatMap((rank) =>
+        SUITS.map((suit) => makeCard(suit, rank, 1)),
+      );
+      const stackedShuffler: ShufflerPort = {
+        shuffle: <T>(items: readonly T[]): T[] => {
+          const cards = items as readonly unknown[] as Card[];
+          if (cards.length !== 40 || typeof cards[0] !== 'object') return [...items];
+          const ids = new Set(stacked.map((card) => card.id));
+          const rest = cards.filter((card) => !ids.has(card.id));
+          const deck = cards.map((_, index) => {
+            const slot = slots.indexOf(index);
+            return slot === -1 ? rest.shift()! : stacked[slot];
+          });
+          return deck as readonly unknown[] as T[];
+        },
+      };
+      await server.close();
+      await start({ shuffler: stackedShuffler });
+
+      const { players } = await fullRoom();
+      const views = await playUntil(players, 1, (view) => view.phase === 'terminated');
+      // Das dauert rund zehn Runden, der Geber ist also mehrfach reihum gegangen.
+      expect(views[0].version).toBeGreaterThan(50);
+
+      for (const view of views) {
+        const best = Math.max(...view.scores);
+        expect(best).toBeGreaterThanOrEqual(1000);
+        expect(view).toMatchObject({
+          phase: 'terminated',
+          abortReason: null,
+          winners: [view.scores.indexOf(best)],
+          availableActions: [],
+        });
+        expect(view.scores.filter((score) => score === best)).toHaveLength(1);
+      }
+      await expect(
+        players[0].waitFor<GameEventBatch>('game:events', (batch) =>
+          batch.events.some((event) => event.type === 'gameFinished'),
+        ),
+      ).resolves.toMatchObject({ version: views[0].version });
     });
   });
 

@@ -128,9 +128,10 @@ describe('legalIntents', () => {
       }
 
       expect(state.phase).toBe(after);
-      // Im Stichspiel spielt die Vorhand (Sitz 1) aus, nach dem Abgehen ist niemand mehr dran.
+      // Im Stichspiel spielt die Vorhand (Sitz 1) aus, nach dem Abgehen bestätigen alle die
+      // nächste Runde.
       const offered = seatsOf(state).filter((seat) => legalIntents(state, seat).length > 0);
-      expect(offered).toEqual(mode === 'play' ? [1] : []);
+      expect(offered).toEqual(mode === 'play' ? [1] : [0, 1, 2]);
     },
   );
 
@@ -164,6 +165,8 @@ describe('legalIntents', () => {
             (): [number, number] => [1, 0],
           );
           for (const [which, value] of [...list, ...passes]) {
+            // In der Abrechnung handeln alle unabhängig; das prüft ein eigener Test.
+            if (state.phase === 'score') break;
             const offers = seatsOf(state).map((seat) => legalIntents(state, seat));
             const active = offers.findIndex((offer) => offer.length > 0);
             if (active === -1) break;
@@ -188,11 +191,11 @@ describe('legalIntents', () => {
             state = result.state;
           }
 
-          expect(activeSeat(state)).toBeNull();
-          // Kein Deadlock: Bietet niemand mehr etwas an, steht die Runde in der Abrechnung
-          // (Schritt 17), nach dem letzten Stich oder direkt nach dem Abgehen.
+          // Kein Deadlock: Die Runde erreicht immer die Abrechnung, nach dem letzten Stich oder
+          // direkt nach dem Abgehen. Dort ist niemand allein am Zug.
           expect(state.round?.dabbStatus).toBe('discarded');
           expect(state.phase).toBe('score');
+          expect(activeSeat(state)).toBeNull();
         }),
       );
     });

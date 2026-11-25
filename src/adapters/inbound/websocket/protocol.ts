@@ -95,7 +95,7 @@ const gameConfigSchema = shared(
   }) satisfies z.ZodType<GameConfig>,
 );
 
-/** Alle Züge einer Runde; die Engine kann bisher alles bis zum Stichspiel (Rest: Schritt 18). */
+/** Alle Züge einer Runde. */
 const playerIntentSchema = client(
   'PlayerIntent',
   exhaustive<PlayerIntent>()(
@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; `readySeats` und `winners` füllt Schritt 18. */
+/** Persönliche Sicht eines Sitzes über das ganze Spiel. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

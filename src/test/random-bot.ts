@@ -7,6 +7,8 @@ import { legalIntents } from '../domain/state/legal-intents';
 /**
  * Zufalls-Bot für den Simulationstest (Planschritt 32). Reines Testwerkzeug, kein Produktfeature:
  * Er wählt nur aus dem, was `legalIntents` anbietet, und ist über den Seed reproduzierbar.
+ * `concretize` wählt rein zufällig im Spielraum eines Angebots, `chooseMove` spielt etwas
+ * vernünftiger, damit Partien ein Ende finden.
  */
 
 /** Liefert eine ganze Zahl in [0, bound). */
@@ -70,13 +72,21 @@ export function concretize(
       };
     case 'playCard':
       return { type: 'playCard', cardId: legal.cardIds[random(legal.cardIds.length)] };
-    // Wächst mit Schritt 18.
-    default:
-      throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
+    case 'readyForNextRound':
+      return { type: 'readyForNextRound' };
   }
 }
 
-/** Der Sitz am Zug und ein zufälliger erlaubter Zug; null, wenn niemand etwas tun kann. */
+/**
+ * Der Sitz am Zug und ein erlaubter Zug; null, wenn niemand etwas tun kann. Ganz zufällig gespielt
+ * reizt der Bot bis 1000 und verfehlt fast jedes Gebot, die Stände fallen dann ins Bodenlose und
+ * keine Partie erreicht 1000 Punkte. Für ganze Partien spielt er deshalb etwas vernünftiger:
+ * - Reizen: mit Wahrscheinlichkeit 1/3 das Mindestgebot, sonst passen.
+ * - Ansage: in 3 von 4 Fällen spielen, sonst abgehen; Trumpf zufällig.
+ * - Melden: in 3 von 4 Fällen den ganzen Vorschlag, sonst eine zufällige Auswahl.
+ * Alle anderen Züge wählt er gleichverteilt aus `legalIntents`. Eine Partie dauert so im Mittel
+ * rund zehn Runden.
+ */
 export function chooseMove(
   state: GameState,
   random: Random,
@@ -85,7 +95,31 @@ export function chooseMove(
     const offers = legalIntents(state, seat);
     if (offers.length === 0) continue;
     const hand = state.round?.hands[seat] ?? [];
-    return { seat, intent: concretize(offers[random(offers.length)], hand, random) };
+    return { seat, intent: choose(offers, hand, random) };
   }
   return null;
+}
+
+function choose(
+  offers: readonly LegalIntent[],
+  hand: readonly Card[],
+  random: Random,
+): PlayerIntent {
+  const [first] = offers;
+  switch (first.type) {
+    case 'bid':
+      return random(3) === 0 ? { type: 'bid', amount: first.min } : { type: 'pass' };
+    case 'declare':
+      return {
+        type: 'declare',
+        trump: SUITS[random(SUITS.length)],
+        mode: random(4) === 0 ? 'abgehen' : 'play',
+      };
+    case 'submitMelds':
+      if (random(4) > 0)
+        return { type: 'submitMelds', meldIds: first.melds.map((meld) => meld.id) };
+      return concretize(first, hand, random);
+    default:
+      return concretize(offers[random(offers.length)], hand, random);
+  }
 }

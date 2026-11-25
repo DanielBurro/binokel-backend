@@ -38,6 +38,7 @@ function round(): RoundState {
     trick: [],
     tricks: [],
     result: null,
+    ready: [],
   };
 }
 

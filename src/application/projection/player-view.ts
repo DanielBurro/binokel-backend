@@ -87,7 +87,7 @@ export interface RoundResultView {
 /**
  * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05), ausgelegt auf die
  * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, die Dabb-Karten nur für den
- * Spielmacher nach der Aufnahme. `readySeats` und `winners` füllt Schritt 18.
+ * Spielmacher nach der Aufnahme.
  */
 export interface PlayerView {
   readonly version: number;

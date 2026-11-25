@@ -1,6 +1,7 @@
 import { cardEyes, type Card } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import { partyCount, partyOf, type PartyId } from '../rules/parties';
+import { discardedEyes } from './dabb';
 import type { PartyResult, RoundResult, RoundState } from './game-state';
 
 /** Bonus für den letzten Stich. */
@@ -58,7 +59,7 @@ export function scoreRound(round: RoundState, config: GameConfig): RoundResult {
       (lastWinner !== undefined && partyOf(lastWinner, playerCount) === party
         ? LAST_TRICK_BONUS
         : 0) +
-      (party === declarerParty ? sumEyes(round.discarded) : 0);
+      (party === declarerParty ? discardedEyes(round) : 0);
     const trickPoints = roundToTen(eyes);
     const meldsCounted = won.length >= 1;
     return {

@@ -26,6 +26,7 @@ function round(overrides: Partial<RoundState> = {}): RoundState {
     trick: [],
     tricks: [],
     result: null,
+    ready: [],
     ...overrides,
   };
 }

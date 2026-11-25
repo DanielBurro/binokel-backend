@@ -325,7 +325,61 @@ describe('projectStateFor', () => {
     });
   });
 
-  it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
+  describe('Nach der Abrechnung', () => {
+    /** Sitz 1 geht mit 150 ab, die Gegner melden nichts. */
+    const scored = (scores?: number[]) => {
+      const taken = play(
+        started(config),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      const declared = play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'abgehen' }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+      );
+      return play(scores ? { ...declared, scores } : declared, [
+        0,
+        { type: 'submitMelds', meldIds: [] },
+      ]);
+    };
+
+    it('zeigt allen, wer die nächste Runde schon bestätigt hat', () => {
+      const state = play(scored(), [2, { type: 'readyForNextRound' }]);
+
+      for (const seat of [0, 1, 2]) {
+        expect(projectStateFor(state, seat, seats)).toMatchObject({
+          phase: 'score',
+          readySeats: [2],
+          activeSeat: null,
+          winners: null,
+        });
+      }
+      expect(projectStateFor(state, 0, seats).availableActions).toEqual([
+        { type: 'readyForNextRound' },
+      ]);
+      expect(projectStateFor(state, 2, seats).availableActions).toEqual([]);
+    });
+
+    it('zeigt nach dem Spielende Sieger, Endstand und die letzte Wertung', () => {
+      const state = scored([980, 400, 900]);
+      const view = projectStateFor(state, 1, seats);
+
+      expect(view).toMatchObject({
+        phase: 'terminated',
+        winners: [0],
+        abortReason: null,
+        scores: [1010, 250, 930],
+        roundResult: { outcome: 'abgehen' },
+        availableActions: [],
+      });
+      expect(view.winners).not.toBe(state.winners);
+    });
+  });
+
+  it('lässt die Felder späterer Phasen beim Reizen leer', () => {
     const state = play(started(configFor(4, 48)), [2, { type: 'pass' }]);
 
     expect(projectStateFor(state, 3, seatsFor(4))).toMatchObject({
