@@ -7,6 +7,7 @@ import { bid, openBidding, pass } from './bidding';
 import { discardToDabb, takeDabb } from './dabb';
 import { declare } from './declare';
 import { nextMelder, submitMelds } from './melding';
+import { winningParty } from './game-end';
 import { scoreRound } from './scoring';
 import { playCard } from './trick-play';
 import { nextPhase, type AbortReason, type GameState, type RoundState } from './game-state';
@@ -138,21 +139,24 @@ function applyPlayCard(
 
 /**
  * Wechselt in die Folgephase. Mit dem Eintritt in die Abrechnung wird die Runde gewertet, und die
- * Punktestände der Parteien werden fortgeschrieben (Studienarbeit FA-20).
+ * Punktestände der Parteien werden fortgeschrieben (Studienarbeit FA-20). Steht danach eine Partei
+ * allein vorn mit mindestens 1000 Punkten, endet das Spiel (FA-21), sonst bleibt es in `score`.
  */
 function advance(state: GameState, round: RoundState, events: readonly GameEvent[]): IntentResult {
   const phase = nextPhase(state);
   if (phase !== 'score') return commit(state, { phase, round }, events);
 
   const result = scoreRound(round, state.config);
+  const scores = state.scores.map((score, party) => score + result.parties[party].delta);
+  const scored: GameEvent[] = [...events, { type: 'roundScored', outcome: result.outcome }];
+  const winner = winningParty(scores);
+  if (winner === null) {
+    return commit(state, { phase, round: { ...round, result }, scores }, scored);
+  }
   return commit(
     state,
-    {
-      phase,
-      round: { ...round, result },
-      scores: state.scores.map((score, party) => score + result.parties[party].delta),
-    },
-    [...events, { type: 'roundScored', outcome: result.outcome }],
+    { phase: 'terminated', round: { ...round, result }, scores, winners: [winner] },
+    [...scored, { type: 'gameFinished', winners: [winner] }],
   );
 }
 

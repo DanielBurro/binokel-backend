@@ -1,7 +1,7 @@
 import type { Card, Suit } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import type { Meld } from '../melds/meld';
-import { assertSeat, partyCount, type Seat } from '../rules/parties';
+import { assertSeat, partyCount, type PartyId, type Seat } from '../rules/parties';
 import type { TrickPlay } from '../rules/trick';
 import { nextMelder } from './melding';
 import { nextPlayer } from './trick-play';
@@ -119,6 +119,8 @@ export interface GameState {
   /** null bis zur ersten Runde. */
   readonly round: RoundState | null;
   readonly abortReason: AbortReason | null;
+  /** Siegerpartei nach regulärem Spielende, als Liste mit genau einem Eintrag; sonst null. */
+  readonly winners: readonly PartyId[] | null;
 }
 
 export function createGame(config: GameConfig, firstDealer: Seat): GameState {
@@ -131,6 +133,7 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
     scores: Array.from({ length: partyCount(config.playerCount) }, () => 0),
     round: null,
     abortReason: null,
+    winners: null,
   };
 }
 
