@@ -163,6 +163,20 @@ describe('GameService', () => {
       expect(messages.filter((message) => message.kind === 'gameEvents')).toHaveLength(1);
     });
 
+    it('lost den Geber der ersten Runde über den Mischer aus', async () => {
+      const { room } = await started();
+      const { broadcaster } = createRecordingBroadcaster();
+      // Dreht die Reihenfolge um: Aus den Sitzen [0, 1, 2] wird Sitz 2 Geber, Vorhand also Sitz 0.
+      const games = createGameService({
+        store: createRoomStore(createFakeRoomRepository(), createFakeClock()),
+        broadcaster,
+        shuffler: { shuffle: (items) => [...items].reverse() },
+      });
+
+      const dealt = await games.startGame({ ...room(), game: null });
+      expect(dealt.game).toMatchObject({ dealer: 2, round: { dealer: 2, forehand: 0 } });
+    });
+
     it('meldet abgelehnte System-Intents als Programmierfehler', async () => {
       const { room } = await started();
       const { broadcaster } = createRecordingBroadcaster();
