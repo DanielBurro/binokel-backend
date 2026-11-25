@@ -1,4 +1,4 @@
-import type { Card } from '../cards/card';
+import type { Card, Suit } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import { assertSeat, partyCount, type Seat } from '../rules/parties';
 
@@ -14,6 +14,12 @@ export type AbortReason = (typeof ABORT_REASONS)[number];
 /** 'play': Der Spielmacher spielt die Runde aus; 'abgehen': Er gibt sie vor dem Stichspiel auf. */
 export const DECLARE_MODES = ['play', 'abgehen'] as const;
 export type DeclareMode = (typeof DECLARE_MODES)[number];
+
+/** Ansage des Spielmachers: Trumpf und Spielart. */
+export interface Declaration {
+  readonly trump: Suit;
+  readonly mode: DeclareMode;
+}
 
 /** 'made': Reizwert erreicht; 'failed': verfehlt; 'abgehen': Die Runde wurde nicht ausgespielt. */
 export const ROUND_OUTCOMES = ['made', 'failed', 'abgehen'] as const;
@@ -51,6 +57,8 @@ export interface RoundState {
   readonly bidding: BiddingState;
   /** Spielmacher nach dem Reizen; sein Reizwert ist `bidding.highestBid`. */
   readonly declarer: Seat | null;
+  /** null bis zur Ansage. */
+  readonly declaration: Declaration | null;
 }
 
 export interface GameState {
@@ -80,7 +88,7 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 14–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 15–18 hinzu. */
 export function activeSeat(state: GameState): Seat | null {
   const { phase, round } = state;
   if (round === null) return null;
@@ -88,6 +96,7 @@ export function activeSeat(state: GameState): Seat | null {
     case 'bidding':
       return round.bidding.activeSeat;
     case 'dabb':
+    case 'declare':
       return round.declarer;
     default:
       return null;
@@ -102,8 +111,12 @@ const PHASE_SUCCESSORS: Readonly<Partial<Record<Phase, RoundPhase>>> = {
   trick: 'score',
 };
 
-/** Erweiterungspunkt: Abgehen und Sonderregeln wie Durch oder Tauschen weichen hier ab. */
+/**
+ * Erweiterungspunkt für Abweichungen von der klassischen Folge: Beim Abgehen geht es nach dem
+ * Melden direkt in die Abrechnung, später weichen Sonderregeln wie Durch oder Tauschen hier ab.
+ */
 export function nextPhase(state: GameState): RoundPhase {
+  if (state.phase === 'meld' && state.round?.declaration?.mode === 'abgehen') return 'score';
   const next = PHASE_SUCCESSORS[state.phase];
   if (next === undefined) {
     throw new Error(`Phase ${state.phase} hat keine Folgephase`);

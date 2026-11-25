@@ -7,8 +7,8 @@ export const SYSTEM = 'system';
 export type Actor = Seat | typeof SYSTEM;
 
 /**
- * Alle Spielerzüge einer Runde. Die Engine setzt bisher Reizen und Dabb um, die übrigen
- * folgen mit den Schritten 14–18 und werden bis dahin abgelehnt.
+ * Alle Spielerzüge einer Runde. Die Engine setzt bisher Reizen, Dabb und Ansage um, die
+ * übrigen folgen mit den Schritten 15–18 und werden bis dahin abgelehnt.
  */
 export type PlayerIntent =
   | { readonly type: 'bid'; readonly amount: number }

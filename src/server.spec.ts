@@ -243,7 +243,7 @@ describe('Socket.IO-Durchstich', () => {
     await expect(cem.waitFor('game:state', stateWith(6))).resolves.toMatchObject({
       phase: 'declare',
       dabb: { size: 4, status: 'discarded', cards: pressed },
-      availableActions: [],
+      availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
     });
     for (const other of [anna, ben]) {
       await expect(other.waitFor('game:state', stateWith(6))).resolves.toMatchObject({

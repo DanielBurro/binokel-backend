@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildDeck } from '../cards/deck';
 import { NO_SPECIAL_RULES, type GameConfig } from '../config/game-config';
 import { applyIntent } from './apply-intent';
-import { activeSeat, createGame, nextPhase, type GameState, type Phase } from './game-state';
+import {
+  activeSeat,
+  createGame,
+  nextPhase,
+  type DeclareMode,
+  type GameState,
+  type Phase,
+} from './game-state';
 import { SYSTEM } from './intents';
 
 const config = (playerCount: 3 | 4): GameConfig => ({
@@ -11,6 +18,16 @@ const config = (playerCount: 3 | 4): GameConfig => ({
   specialRules: NO_SPECIAL_RULES,
   mode: 'classic',
 });
+
+/** Geber 0, Vorhand 1, zuerst ist Sitz 2 am Zug. */
+function started(): GameState {
+  const result = applyIntent(createGame(config(3), 0), SYSTEM, {
+    type: 'startRound',
+    shuffledDeck: buildDeck(48),
+  });
+  if (!result.ok) throw new Error(`Unerwarteter Fehler ${result.code}`);
+  return result.state;
+}
 
 describe('createGame', () => {
   it('legt ein Spiel ohne Runde mit Version 0 und Nullständen je Partei an', () => {
@@ -37,33 +54,36 @@ describe('nextPhase', () => {
     expect(nextPhase(withPhase('trick'))).toBe('score');
   });
 
+  it('geht beim Abgehen nach dem Melden direkt in die Abrechnung', () => {
+    const declared = (mode: DeclareMode): GameState => {
+      const state = started();
+      return {
+        ...state,
+        phase: 'meld',
+        round: { ...state.round!, declaration: { trump: 'herz', mode } },
+      };
+    };
+
+    expect(nextPhase(declared('abgehen'))).toBe('score');
+    expect(nextPhase(declared('play'))).toBe('trick');
+  });
+
   it.each<Phase>(['created', 'score', 'terminated'])('kennt keine Folgephase für %s', (phase) => {
     expect(() => nextPhase(withPhase(phase))).toThrow();
   });
 });
 
 describe('activeSeat', () => {
-  const started = (): GameState => {
-    const result = applyIntent(createGame(config(3), 0), SYSTEM, {
-      type: 'startRound',
-      shuffledDeck: buildDeck(48),
-    });
-    if (!result.ok) throw new Error(`Unerwarteter Fehler ${result.code}`);
-    return result.state;
-  };
-
   it('nennt beim Reizen den Sitz, der bieten oder passen muss', () => {
     expect(activeSeat(started())).toBe(2);
   });
 
-  it('nennt in der Dabb-Phase den Spielmacher', () => {
+  it.each<Phase>(['dabb', 'declare'])('nennt in Phase %s den Spielmacher', (phase) => {
     const state = started();
-    expect(activeSeat({ ...state, phase: 'dabb', round: { ...state.round!, declarer: 1 } })).toBe(
-      1,
-    );
+    expect(activeSeat({ ...state, phase, round: { ...state.round!, declarer: 1 } })).toBe(1);
   });
 
-  it.each<Phase>(['created', 'declare', 'terminated'])('ist in Phase %s niemand', (phase) => {
+  it.each<Phase>(['created', 'meld', 'terminated'])('ist in Phase %s niemand', (phase) => {
     expect(activeSeat({ ...started(), phase })).toBeNull();
   });
 

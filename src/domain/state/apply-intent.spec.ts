@@ -188,9 +188,76 @@ describe('applyIntent', () => {
     });
   });
 
+  describe('Ansage', () => {
+    /** Sitz 1 ist Spielmacher und hat schon gedrückt. */
+    const discarded = () => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(taken, [
+        1,
+        { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) },
+      ]);
+    };
+
+    it.each(['play', 'abgehen'] as const)(
+      'hält Trumpf und Spielart fest und wechselt zum Melden (%s)',
+      (mode) => {
+        const result = applyIntent(deepFreeze(discarded()), 1, {
+          type: 'declare',
+          trump: 'eichel',
+          mode,
+        });
+
+        expect(result).toEqual({
+          ok: true,
+          state: expect.objectContaining({ version: 6, phase: 'meld' }),
+          events: [{ type: 'declared', seat: 1, trump: 'eichel', mode }],
+        });
+        if (!result.ok) return;
+        expect(result.state.round!.declaration).toEqual({ trump: 'eichel', mode });
+      },
+    );
+
+    it('lässt den Zustand bei Regelverstößen unverändert', () => {
+      const state = deepFreeze(discarded());
+
+      expect(applyIntent(state, 2, { type: 'declare', trump: 'herz', mode: 'play' })).toEqual({
+        ok: false,
+        code: 'NOT_YOUR_TURN',
+      });
+      expect(state.version).toBe(5);
+      expect(state.round!.declaration).toBeNull();
+    });
+
+    it('nimmt die Ansage nur einmal und nicht vor dem Drücken an', () => {
+      const declare: PlayerIntent = { type: 'declare', trump: 'herz', mode: 'play' };
+      const declared = play(discarded(), [1, declare]);
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+
+      expect(applyIntent(declared, 1, declare)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+      expect(applyIntent(taken, 1, declare)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+      expect(applyIntent(started(), 2, declare)).toEqual({ ok: false, code: 'WRONG_PHASE' });
+    });
+
+    it('nimmt in der Ansage keine Dabb-Züge mehr an', () => {
+      expect(applyIntent(discarded(), 1, { type: 'takeDabb' })).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+    });
+  });
+
   describe('Züge der übrigen Phasen', () => {
     const later: PlayerIntent[] = [
-      { type: 'declare', trump: 'herz', mode: 'play' },
       { type: 'submitMelds', meldIds: [] },
       { type: 'playCard', cardId: 'herz-ass-1' },
       { type: 'readyForNextRound' },

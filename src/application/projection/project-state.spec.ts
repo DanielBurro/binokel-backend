@@ -151,8 +151,8 @@ describe('projectStateFor', () => {
       expect(projectStateFor(state, 1, seats)).toMatchObject({
         phase: 'declare',
         dabb: { size: 4, status: 'discarded', cards: pressed },
-        activeSeat: null,
-        availableActions: [],
+        activeSeat: 1,
+        availableActions: [{ type: 'declare', modes: ['play', 'abgehen'] }],
       });
       for (const seat of [0, 2]) {
         expect(projectStateFor(state, seat, seats).dabb).toEqual({

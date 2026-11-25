@@ -1,4 +1,4 @@
-import type { Card } from '../domain/cards/card';
+import { SUITS, type Card } from '../domain/cards/card';
 import type { Seat } from '../domain/rules/parties';
 import type { GameState } from '../domain/state/game-state';
 import type { LegalIntent, PlayerIntent } from '../domain/state/intents';
@@ -56,7 +56,13 @@ export function concretize(
         .map((card) => card.id);
       return { type: 'discardToDabb', cardIds };
     }
-    // Wächst mit den Schritten 14–18.
+    case 'declare':
+      return {
+        type: 'declare',
+        trump: SUITS[random(SUITS.length)],
+        mode: legal.modes[random(legal.modes.length)],
+      };
+    // Wächst mit den Schritten 15–18.
     default:
       throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
   }

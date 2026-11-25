@@ -20,8 +20,8 @@ import { legalIntents } from './legal-intents';
  * bis er ganze Partien bis zum Spielende spielt.
  */
 
-/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 14 rückt das weiter. */
-const LAST_REACHABLE_PHASE: Phase = 'declare';
+/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 15 rückt das weiter. */
+const LAST_REACHABLE_PHASE: Phase = 'meld';
 const ROUNDS_PER_CONFIG = 500;
 /** Obergrenze gegen Endlosschleifen; eine Runde braucht bisher höchstens rund 100 Züge. */
 const MAX_MOVES = 500;
