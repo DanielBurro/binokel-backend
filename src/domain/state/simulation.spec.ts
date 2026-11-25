@@ -23,7 +23,7 @@ import { MELD_GROUP, MELD_GROUPS, meldPoints } from '../melds/meld';
  * bis er ganze Partien bis zum Spielende spielt.
  */
 
-/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 17 rückt das weiter. */
+/** Bis hierhin reichen die umgesetzten Regeln; mit Schritt 18 folgen weitere Runden. */
 const LAST_REACHABLE_PHASE: Phase = 'score';
 const ROUNDS_PER_CONFIG = 500;
 /** Obergrenze gegen Endlosschleifen; eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000, alle Karten). */
@@ -171,6 +171,61 @@ function checkFollowing(state: GameState, seat: Seat, cardId: string, context: s
   }
 }
 
+/** Ungerundete Augenbilanz eines gespielten Spiels: 240 aus den Karten plus 10 für den letzten Stich. */
+const PLAYED_ROUND_EYES = 250;
+
+/**
+ * Prüft die Wertung einer fertigen Runde gegen die Tabelle „Rundenwertung“ der Studienarbeit. Augen,
+ * Rundung und Meldesummen rechnet der Test selbst aus, je Sitz statt je Partei aufsummiert.
+ */
+function checkScoring(end: GameState, context: string): void {
+  const { round, config } = end;
+  const { result, declarer, declaration, bidding, tricks, melds, discarded } = round!;
+  const n = config.playerCount;
+  const bid = bidding.highestBid;
+  const own = partyOf(declarer!, n);
+  expect(result, context).not.toBeNull();
+  const parties = result!.parties;
+
+  const meldSum = parties.map(() => 0);
+  melds.forEach((entry, seat) => (meldSum[partyOf(seat, n)] += entry?.points ?? 0));
+  parties.forEach((party, index) => expect(party.meldPoints, context).toBe(meldSum[index]));
+
+  if (declaration!.mode === 'abgehen') {
+    expect(result!.outcome, context).toBe('abgehen');
+    parties.forEach((party, index) =>
+      expect(party.delta, context).toBe(index === own ? -bid : meldSum[index] + 10 * n),
+    );
+  } else {
+    const eyes = parties.map(() => 0);
+    const won = parties.map(() => 0);
+    for (const trick of tricks) {
+      won[partyOf(trick.winner, n)] += 1;
+      for (const play of trick.plays) eyes[partyOf(trick.winner, n)] += cardEyes(play.card);
+    }
+    eyes[partyOf(tricks[tricks.length - 1].winner, n)] += 10;
+    for (const card of discarded) eyes[own] += cardEyes(card);
+    expect(
+      eyes.reduce((sum, value) => sum + value, 0),
+      context,
+    ).toBe(PLAYED_ROUND_EYES);
+
+    const earned = eyes.map((value, index) => {
+      const rounded = Math.round(value / 10) * 10;
+      expect(parties[index].trickPoints, context).toBe(rounded);
+      return rounded + (won[index] >= 1 ? meldSum[index] : 0);
+    });
+    const made = earned[own] >= bid;
+    expect(result!.outcome, context).toBe(made ? 'made' : 'failed');
+    parties.forEach((party, index) =>
+      expect(party.delta, context).toBe(index === own && !made ? -2 * bid : earned[index]),
+    );
+  }
+
+  // Erste Runde: Die Punktestände sind genau die Veränderungen dieser Runde.
+  expect(end.scores, context).toEqual(parties.map((party) => party.delta));
+}
+
 function playRound(config: GameConfig, seed: number): GameState {
   const random = seededRandom(seed);
   const dealer = random(config.playerCount);
@@ -212,6 +267,7 @@ describe('Simulation mit Zufalls-Bot', () => {
       const config = configFor(playerCount, deckSize);
       const declarations = new Set<string>();
       const meldKinds = new Set<string>();
+      const outcomes = new Set<string>();
       for (let round = 0; round < ROUNDS_PER_CONFIG; round++) {
         const seed = playerCount * 100_000 + deckSize * 1_000 + round;
         const end = playRound(config, seed);
@@ -227,6 +283,8 @@ describe('Simulation mit Zufalls-Bot', () => {
         );
         const { trump, mode } = end.round!.declaration!;
         declarations.add(`${trump}/${mode}`);
+        checkScoring(end, `Seed ${seed}`);
+        outcomes.add(end.round!.result!.outcome);
 
         // Am Ende hat jeder Berechtigte gemeldet, und nur die.
         end.round!.melds.forEach((entry, seat) => {
@@ -244,6 +302,8 @@ describe('Simulation mit Zufalls-Bot', () => {
         expect.arrayContaining(deckSize === 48 ? [...common, 'diss'] : common),
       );
       expect(meldKinds.has('diss')).toBe(deckSize === 48);
+      // Der Bot erreicht, verfehlt und geht ab.
+      expect([...outcomes].sort()).toEqual(['abgehen', 'failed', 'made']);
     },
     SIMULATION_TIMEOUT_MS,
   );
