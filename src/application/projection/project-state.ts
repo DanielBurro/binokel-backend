@@ -4,7 +4,13 @@ import type { TrickPlay } from '../../domain/rules/trick';
 import { assertSeat, partyOf, type Seat } from '../../domain/rules/parties';
 import { activeSeat, type GameState, type RoundState } from '../../domain/state/game-state';
 import { legalIntents } from '../../domain/state/legal-intents';
-import type { CompletedTrickView, DabbView, PlayerView, SeatInfo } from './player-view';
+import type {
+  CompletedTrickView,
+  DabbView,
+  PlayerView,
+  RoundResultView,
+  SeatInfo,
+} from './player-view';
 
 /** Baut die Sicht eines Sitzes Feld für Feld auf, damit nichts ungewollt durchrutscht. */
 export function projectStateFor(
@@ -54,8 +60,8 @@ export function projectStateFor(
     // Gelegte Karten sind öffentlich: der laufende Stich und der zuletzt abgeschlossene.
     trick: state.phase === 'trick' && round ? { plays: round.trick.map(toPlay) } : null,
     lastTrick: projectLastTrick(round),
-    // Abrechnung und Spielende füllen die Schritte 17–18.
-    roundResult: null,
+    roundResult: projectRoundResult(round),
+    // Bestätigungen und Spielende füllt Schritt 18.
     readySeats: [],
     activeSeat: activeSeat(state),
     scores: [...state.scores],
@@ -84,6 +90,21 @@ function projectDabb(round: RoundState, seat: Seat): DabbView {
         cards: visible ? discarded.map(toCard) : null,
       };
   }
+}
+
+/** Nur die Felder des Vertrags; ungerundete Augen und Stichzahl bleiben in der Domäne. */
+function projectRoundResult(round: RoundState | null): RoundResultView | null {
+  const result = round?.result;
+  if (!result) return null;
+  return {
+    outcome: result.outcome,
+    parties: result.parties.map(({ trickPoints, meldPoints, meldsCounted, delta }) => ({
+      trickPoints,
+      meldPoints,
+      meldsCounted,
+      delta,
+    })),
+  };
 }
 
 function projectLastTrick(round: RoundState | null): CompletedTrickView | null {

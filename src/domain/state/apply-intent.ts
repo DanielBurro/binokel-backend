@@ -7,8 +7,9 @@ import { bid, openBidding, pass } from './bidding';
 import { discardToDabb, takeDabb } from './dabb';
 import { declare } from './declare';
 import { nextMelder, submitMelds } from './melding';
+import { scoreRound } from './scoring';
 import { playCard } from './trick-play';
-import { nextPhase, type AbortReason, type GameState } from './game-state';
+import { nextPhase, type AbortReason, type GameState, type RoundState } from './game-state';
 import {
   SYSTEM,
   fail,
@@ -112,12 +113,10 @@ function applyMelds(
   const result = submitMelds(round, seat, intent.meldIds, config);
   if (!result.ok) return result;
   // Haben alle gemeldet, folgt das Stichspiel, beim Abgehen direkt die Abrechnung.
-  const done = nextMelder(result.round, config.playerCount) === null;
-  return commit(
-    state,
-    { phase: done ? nextPhase(state) : state.phase, round: result.round },
-    result.events,
-  );
+  if (nextMelder(result.round, config.playerCount) !== null) {
+    return commit(state, { round: result.round }, result.events);
+  }
+  return advance(state, result.round, result.events);
 }
 
 function applyPlayCard(
@@ -131,11 +130,29 @@ function applyPlayCard(
   const result = playCard(round, seat, intent.cardId, config);
   if (!result.ok) return result;
   // Sind alle Hände leer, ist der letzte Stich gespielt, und die Abrechnung folgt.
-  const done = result.round.hands.every((hand) => hand.length === 0);
+  if (result.round.hands.some((hand) => hand.length > 0)) {
+    return commit(state, { round: result.round }, result.events);
+  }
+  return advance(state, result.round, result.events);
+}
+
+/**
+ * Wechselt in die Folgephase. Mit dem Eintritt in die Abrechnung wird die Runde gewertet, und die
+ * Punktestände der Parteien werden fortgeschrieben (Studienarbeit FA-20).
+ */
+function advance(state: GameState, round: RoundState, events: readonly GameEvent[]): IntentResult {
+  const phase = nextPhase(state);
+  if (phase !== 'score') return commit(state, { phase, round }, events);
+
+  const result = scoreRound(round, state.config);
   return commit(
     state,
-    { phase: done ? nextPhase(state) : state.phase, round: result.round },
-    result.events,
+    {
+      phase,
+      round: { ...round, result },
+      scores: state.scores.map((score, party) => score + result.parties[party].delta),
+    },
+    [...events, { type: 'roundScored', outcome: result.outcome }],
   );
 }
 
@@ -194,6 +211,7 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
         melds: hands.map(() => null),
         trick: [],
         tricks: [],
+        result: null,
       },
     },
     [{ type: 'roundStarted', dealer, forehand }],

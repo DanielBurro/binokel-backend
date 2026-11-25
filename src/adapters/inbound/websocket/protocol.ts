@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `roundResult` füllen die Schritte 17–18. */
+/** Auf die ganze Runde ausgelegt; `readySeats` und `winners` füllt Schritt 18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

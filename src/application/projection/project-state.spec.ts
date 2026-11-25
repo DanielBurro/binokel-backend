@@ -301,6 +301,28 @@ describe('projectStateFor', () => {
         hand: [],
       });
     });
+
+    it('zeigt allen die Wertung der Runde und die neuen Punktestände', () => {
+      const state = playCards(inTricks(), 36);
+      const { result } = state.round!;
+
+      expect(projectStateFor(inTricks(), 0, seats).roundResult).toBeNull();
+      for (const seat of [0, 1, 2]) {
+        const view = projectStateFor(state, seat, seats);
+        expect(view.roundResult).toEqual({
+          outcome: result!.outcome,
+          parties: result!.parties.map(({ trickPoints, meldPoints, meldsCounted, delta }) => ({
+            trickPoints,
+            meldPoints,
+            meldsCounted,
+            delta,
+          })),
+        });
+        expect(view.scores).toEqual(result!.parties.map((party) => party.delta));
+      }
+      // Ungerundete Augen und Stichzahl gehören nicht zum Vertrag.
+      expect(projectStateFor(state, 0, seats).roundResult!.parties[0]).not.toHaveProperty('eyes');
+    });
   });
 
   it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
