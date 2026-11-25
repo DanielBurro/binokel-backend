@@ -61,12 +61,11 @@ export function projectStateFor(
     trick: state.phase === 'trick' && round ? { plays: round.trick.map(toPlay) } : null,
     lastTrick: projectLastTrick(round),
     roundResult: projectRoundResult(round),
-    // Bestätigungen und Spielende füllt Schritt 18.
-    readySeats: [],
+    readySeats: [...(round?.ready ?? [])],
     activeSeat: activeSeat(state),
     scores: [...state.scores],
     abortReason: state.abortReason,
-    winners: null,
+    winners: state.winners ? [...state.winners] : null,
     availableActions: legalIntents(state, seat),
   };
 }
