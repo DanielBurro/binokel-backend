@@ -69,7 +69,8 @@ Client und Server sprechen über Socket.IO. Der Vertrag steht in [`protocol.ts`]
 - Jeder Zug trägt die `version` der Sicht, auf der er beruht. Ist sie veraltet, antwortet der Server mit `STALE_STATE`.
 - Den Dabb sieht nur der Spielmacher, und erst nach der Aufnahme: `dabb.cards` enthält für ihn bei `status: 'taken'` die aufgenommenen und bei `'discarded'` die gedrückten Karten. Alle anderen Sitze, auch der Partner, bekommen nur `size` und `status`.
 - Nach dem Drücken sagt der Spielmacher mit `declare { trump, mode }` Trumpf und Spielart an. Jede Farbe ist als Trumpf erlaubt, `availableActions` bietet die Spielarten `play` und `abgehen` an. Die Ansage steht danach für alle Sitze in `declaration`, und die Runde wechselt in `meld`, auch beim Abgehen (dann melden nur die Gegenparteien, danach folgt direkt die Abrechnung).
-- Das Protokoll beschreibt bereits die ganze Runde. Der Server setzt bisher den Weg bis zur Ansage um: Die Züge `submitMelds`, `playCard` und `readyForNextRound` werden noch abgelehnt, und die Felder `melds`, `trick`, `lastTrick`, `roundResult`, `readySeats` und `winners` bleiben leer.
+- Gemeldet wird ab dem Spielmacher in Spielrichtung, beim Abgehen nur von den Gegenparteien. Der Server bietet dem Sitz am Zug über `availableActions` (`{ type: 'submitMelds', melds }`) die punktehöchste gültige Auswahl seiner Hand an. Mit `submitMelds { meldIds }` meldet der Sitz diese Auswahl oder einen Teil davon, auch gar nichts (`meldIds: []`). Gemeldete Karten und Punkte sind öffentlich und stehen für alle Sitze in `melds`. Ob sie zählen, entscheidet erst die Abrechnung (mindestens ein Stich).
+- Das Protokoll beschreibt bereits die ganze Runde. Der Server setzt bisher den Weg bis zum Melden um: Die Züge `playCard` und `readyForNextRound` werden noch abgelehnt, und die Felder `trick`, `lastTrick`, `roundResult`, `readySeats` und `winners` bleiben leer.
 
 ## Git Commit-Konventionen
 
