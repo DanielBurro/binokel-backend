@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardEyes, SUITS, type Card } from '../cards/card';
+import { cardEyes, RANK_STRENGTH, SUITS, type Card } from '../cards/card';
 import { partyOf, type Seat } from '../rules/parties';
 import type { TrickPlay } from '../rules/trick';
 import { buildDeck } from '../cards/deck';
@@ -26,7 +26,7 @@ import { MELD_GROUP, MELD_GROUPS, meldPoints } from '../melds/meld';
 /** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 17 rückt das weiter. */
 const LAST_REACHABLE_PHASE: Phase = 'score';
 const ROUNDS_PER_CONFIG = 500;
-/** Obergrenze gegen Endlosschleifen; eine Runde braucht bisher höchstens rund 100 Züge. */
+/** Obergrenze gegen Endlosschleifen; eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000, alle Karten). */
 const MAX_MOVES = 500;
 const DECK_EYES = 240;
 /** Phasen, in denen noch nicht angesagt ist. */
@@ -124,6 +124,47 @@ function checkInvariants(state: GameState, seed: number): void {
   expect(offering, context).toEqual(active === null ? [] : [active]);
 }
 
+/**
+ * Stichgewinner, unabhängig von der Engine nach dem Wortlaut der Spielregeln: Liegt Trumpf, sticht
+ * der höchste Trumpf, sonst die höchste Karte der angespielten Farbe. Von zwei gleichen Karten
+ * sticht die zuerst gelegte.
+ */
+function expectedWinner(plays: readonly TrickPlay[], trump: string): Seat {
+  const trumps = plays.filter((play) => play.card.suit === trump);
+  const led = plays.filter((play) => play.card.suit === plays[0].card.suit);
+  const pool = trumps.length > 0 ? trumps : led;
+  const best = Math.max(...pool.map((play) => RANK_STRENGTH[play.card.rank]));
+  return pool.find((play) => RANK_STRENGTH[play.card.rank] === best)!.seat;
+}
+
+/** Abgeschlossene Stiche: Ausspielreihenfolge, Anspielrecht und Gewinner. */
+function checkTricks(state: GameState, context: string): void {
+  const { tricks, forehand, declaration } = state.round!;
+  const n = state.config.playerCount;
+  tricks.forEach((trick, index) => {
+    const leader = index === 0 ? forehand : tricks[index - 1].winner;
+    expect(
+      trick.plays.map((play) => play.seat),
+      context,
+    ).toEqual(Array.from({ length: n }, (_, offset) => (leader + offset) % n));
+    expect(trick.winner, context).toBe(expectedWinner(trick.plays, declaration!.trump));
+  });
+}
+
+/** Farb- und Trumpfzwang aus Sicht des Sitzes, der gerade eine Karte legt. */
+function checkFollowing(state: GameState, seat: Seat, cardId: string, context: string): void {
+  const { trick, hands, declaration } = state.round!;
+  if (trick.length === 0) return;
+  const led = trick[0].card.suit;
+  const hand = hands[seat];
+  const card = hand.find((own) => own.id === cardId)!;
+  if (hand.some((own) => own.suit === led)) {
+    expect(card.suit, `${context}: Farbzwang`).toBe(led);
+  } else if (hand.some((own) => own.suit === declaration!.trump)) {
+    expect(card.suit, `${context}: Trumpfzwang`).toBe(declaration!.trump);
+  }
+}
+
 function playRound(config: GameConfig, seed: number): GameState {
   const random = seededRandom(seed);
   const dealer = random(config.playerCount);
@@ -136,8 +177,17 @@ function playRound(config: GameConfig, seed: number): GameState {
   let state = started.state;
   for (let moves = 0; moves < MAX_MOVES; moves++) {
     checkInvariants(state, seed);
+    checkTricks(state, `Seed ${seed}, Version ${state.version}`);
     const move = chooseMove(state, random);
     if (move === null) return state;
+    if (move.intent.type === 'playCard') {
+      checkFollowing(
+        state,
+        move.seat,
+        move.intent.cardId,
+        `Seed ${seed}, Version ${state.version}`,
+      );
+    }
 
     const result = applyIntent(state, move.seat, move.intent);
     if (!result.ok) {
