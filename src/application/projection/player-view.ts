@@ -84,7 +84,7 @@ export interface RoundResultView {
 /**
  * Personalisierte Sicht eines Sitzes und Vertrag mit dem Frontend (FA-05), ausgelegt auf die
  * ganze Runde. Whitelist: Fremde Hände sind nie enthalten, die Dabb-Karten nur für den
- * Spielmacher nach der Aufnahme. Die Felder ab `trick` füllen die Schritte 16–18.
+ * Spielmacher nach der Aufnahme. Die Felder ab `roundResult` füllen die Schritte 17–18.
  */
 export interface PlayerView {
   readonly version: number;
@@ -106,6 +106,7 @@ export interface PlayerView {
   readonly melds: readonly (SeatMeldsView | null)[];
   /** null außerhalb des Stichspiels. */
   readonly trick: TrickView | null;
+  /** Zuletzt abgeschlossener Stich, auch noch in der Abrechnung; null vor dem ersten. */
   readonly lastTrick: CompletedTrickView | null;
   /** Aufschlüsselung der Runde; null bis zur Abrechnung. */
   readonly roundResult: RoundResultView | null;

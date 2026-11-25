@@ -2,7 +2,9 @@ import type { Card, Suit } from '../cards/card';
 import type { GameConfig } from '../config/game-config';
 import type { Meld } from '../melds/meld';
 import { assertSeat, partyCount, type Seat } from '../rules/parties';
+import type { TrickPlay } from '../rules/trick';
 import { nextMelder } from './melding';
+import { nextPlayer } from './trick-play';
 
 export const ROUND_PHASES = ['bidding', 'dabb', 'declare', 'meld', 'trick', 'score'] as const;
 export type RoundPhase = (typeof ROUND_PHASES)[number];
@@ -40,6 +42,12 @@ export interface SeatMelds {
   readonly points: number;
 }
 
+export interface CompletedTrick {
+  /** In Ausspielreihenfolge. */
+  readonly plays: readonly TrickPlay[];
+  readonly winner: Seat;
+}
+
 export interface BiddingState {
   /** Beginnt mit dem Eröffnungsgebot von Vorhand. */
   readonly highestBid: number;
@@ -69,6 +77,10 @@ export interface RoundState {
   readonly declaration: Declaration | null;
   /** Nach Sitz indiziert; null, solange der Sitz nicht gemeldet hat oder nicht melden darf. */
   readonly melds: readonly (SeatMelds | null)[];
+  /** Karten des laufenden Stichs in Ausspielreihenfolge; leer außerhalb des Stichspiels. */
+  readonly trick: readonly TrickPlay[];
+  /** Abgeschlossene Stiche in Spielreihenfolge. */
+  readonly tricks: readonly CompletedTrick[];
 }
 
 export interface GameState {
@@ -98,7 +110,7 @@ export function createGame(config: GameConfig, firstDealer: Seat): GameState {
   };
 }
 
-/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 16–18 hinzu. */
+/** Sitz, der als Nächstes handeln muss; die übrigen Phasen kommen mit den Schritten 17–18 hinzu. */
 export function activeSeat(state: GameState): Seat | null {
   const { phase, round } = state;
   if (round === null) return null;
@@ -110,6 +122,8 @@ export function activeSeat(state: GameState): Seat | null {
       return round.declarer;
     case 'meld':
       return nextMelder(round, state.config.playerCount);
+    case 'trick':
+      return nextPlayer(round, state.config.playerCount);
     default:
       return null;
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cardEyes, SUITS, type Card } from '../cards/card';
+import { cardEyes, RANK_STRENGTH, SUITS, type Card } from '../cards/card';
 import { partyOf, type Seat } from '../rules/parties';
+import type { TrickPlay } from '../rules/trick';
 import { buildDeck } from '../cards/deck';
 import { handSize } from '../config/deal-pattern';
 import {
@@ -22,14 +23,10 @@ import { MELD_GROUP, MELD_GROUPS, meldPoints } from '../melds/meld';
  * bis er ganze Partien bis zum Spielende spielt.
  */
 
-/**
- * Bis hierhin reichen die umgesetzten Regeln: nach dem Melden das Stichspiel, beim Abgehen die
- * Abrechnung. Ab Schritt 16 rückt das weiter.
- */
-const lastReachablePhase = (state: GameState): Phase =>
-  state.round!.declaration!.mode === 'abgehen' ? 'score' : 'trick';
+/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 17 rückt das weiter. */
+const LAST_REACHABLE_PHASE: Phase = 'score';
 const ROUNDS_PER_CONFIG = 500;
-/** Obergrenze gegen Endlosschleifen; eine Runde braucht bisher höchstens rund 100 Züge. */
+/** Obergrenze gegen Endlosschleifen; eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000, alle Karten). */
 const MAX_MOVES = 500;
 const DECK_EYES = 240;
 /** Phasen, in denen noch nicht angesagt ist. */
@@ -49,10 +46,21 @@ const configFor = (playerCount: PlayerCount, deckSize: DeckSize): GameConfig => 
   mode: 'classic',
 });
 
-/** Jede Karte liegt genau einmal auf einer Hand, im Dabb oder bei den gedrückten Karten. */
+/** Jede Karte liegt genau einmal auf einer Hand, im Dabb, bei den gedrückten Karten oder im Stich. */
 function cardsInPlay(state: GameState): Card[] {
   const { hands, dabb, dabbStatus, discarded } = state.round!;
-  return [...hands.flat(), ...(dabbStatus === 'table' ? dabb : []), ...discarded];
+  return [
+    ...hands.flat(),
+    ...(dabbStatus === 'table' ? dabb : []),
+    ...discarded,
+    ...playedCards(state).map((play) => play.card),
+  ];
+}
+
+/** Alle gelegten Karten der Runde: abgeschlossene Stiche und der laufende. */
+function playedCards(state: GameState): TrickPlay[] {
+  const { trick, tricks } = state.round!;
+  return [...tricks.flatMap((done) => done.plays), ...trick];
 }
 
 /** Unabhängig von der Engine formuliert: Beim Abgehen meldet die Partei des Spielmachers nicht. */
@@ -74,21 +82,31 @@ function checkInvariants(state: GameState, seed: number): void {
     context,
   ).toBe(DECK_EYES);
 
-  // Außer dem Spielmacher behält jeder seine ausgeteilte Kartenzahl.
+  // Außer dem Spielmacher vor dem Drücken hält jeder seine ausgeteilte Kartenzahl, abzüglich
+  // der Karten, die er schon gelegt hat.
   round!.hands.forEach((hand, seat) => {
-    if (seat !== round!.declarer) expect(hand, context).toHaveLength(handSize(config));
+    if (seat === round!.declarer && round!.dabbStatus !== 'discarded') return;
+    const played = playedCards(state).filter((play) => play.seat === seat).length;
+    expect(hand.length + played, context).toBe(handSize(config));
   });
 
   // Trumpf und Spielart stehen genau ab dem Ende der Ansage fest.
   expect(round!.declaration === null, context).toBe(BEFORE_DECLARATION.has(state.phase));
 
   // Meldungen: nur Berechtigte, nur eigene Karten, je Gruppe kartendisjunkt, Punkte als Summe.
-  // Bis zum Stichspiel liegen gemeldete Karten noch auf der Hand.
+  // Gemeldete Karten liegen auf der Hand des Sitzes oder wurden von ihm schon gelegt.
   round!.melds.forEach((entry, seat) => {
     if (entry === null) return;
     expect(eligible(state, seat), context).toBe(true);
     expect(entry.points, context).toBe(meldPoints(entry.melds));
-    const own = new Set(round!.hands[seat].map((card) => card.id));
+    const own = new Set(
+      [
+        ...round!.hands[seat],
+        ...playedCards(state)
+          .filter((play) => play.seat === seat)
+          .map((play) => play.card),
+      ].map((card) => card.id),
+    );
     for (const group of MELD_GROUPS) {
       const ids = entry.melds
         .filter((meld) => MELD_GROUP[meld.kind] === group)
@@ -106,6 +124,47 @@ function checkInvariants(state: GameState, seed: number): void {
   expect(offering, context).toEqual(active === null ? [] : [active]);
 }
 
+/**
+ * Stichgewinner, unabhängig von der Engine nach dem Wortlaut der Spielregeln: Liegt Trumpf, sticht
+ * der höchste Trumpf, sonst die höchste Karte der angespielten Farbe. Von zwei gleichen Karten
+ * sticht die zuerst gelegte.
+ */
+function expectedWinner(plays: readonly TrickPlay[], trump: string): Seat {
+  const trumps = plays.filter((play) => play.card.suit === trump);
+  const led = plays.filter((play) => play.card.suit === plays[0].card.suit);
+  const pool = trumps.length > 0 ? trumps : led;
+  const best = Math.max(...pool.map((play) => RANK_STRENGTH[play.card.rank]));
+  return pool.find((play) => RANK_STRENGTH[play.card.rank] === best)!.seat;
+}
+
+/** Abgeschlossene Stiche: Ausspielreihenfolge, Anspielrecht und Gewinner. */
+function checkTricks(state: GameState, context: string): void {
+  const { tricks, forehand, declaration } = state.round!;
+  const n = state.config.playerCount;
+  tricks.forEach((trick, index) => {
+    const leader = index === 0 ? forehand : tricks[index - 1].winner;
+    expect(
+      trick.plays.map((play) => play.seat),
+      context,
+    ).toEqual(Array.from({ length: n }, (_, offset) => (leader + offset) % n));
+    expect(trick.winner, context).toBe(expectedWinner(trick.plays, declaration!.trump));
+  });
+}
+
+/** Farb- und Trumpfzwang aus Sicht des Sitzes, der gerade eine Karte legt. */
+function checkFollowing(state: GameState, seat: Seat, cardId: string, context: string): void {
+  const { trick, hands, declaration } = state.round!;
+  if (trick.length === 0) return;
+  const led = trick[0].card.suit;
+  const hand = hands[seat];
+  const card = hand.find((own) => own.id === cardId)!;
+  if (hand.some((own) => own.suit === led)) {
+    expect(card.suit, `${context}: Farbzwang`).toBe(led);
+  } else if (hand.some((own) => own.suit === declaration!.trump)) {
+    expect(card.suit, `${context}: Trumpfzwang`).toBe(declaration!.trump);
+  }
+}
+
 function playRound(config: GameConfig, seed: number): GameState {
   const random = seededRandom(seed);
   const dealer = random(config.playerCount);
@@ -118,8 +177,17 @@ function playRound(config: GameConfig, seed: number): GameState {
   let state = started.state;
   for (let moves = 0; moves < MAX_MOVES; moves++) {
     checkInvariants(state, seed);
+    checkTricks(state, `Seed ${seed}, Version ${state.version}`);
     const move = chooseMove(state, random);
     if (move === null) return state;
+    if (move.intent.type === 'playCard') {
+      checkFollowing(
+        state,
+        move.seat,
+        move.intent.cardId,
+        `Seed ${seed}, Version ${state.version}`,
+      );
+    }
 
     const result = applyIntent(state, move.seat, move.intent);
     if (!result.ok) {
@@ -143,10 +211,13 @@ describe('Simulation mit Zufalls-Bot', () => {
         const end = playRound(config, seed);
 
         // Kein Deadlock: Bietet niemand mehr etwas an, ist die letzte erreichbare Phase erreicht.
-        expect(end.phase, `Seed ${seed}`).toBe(lastReachablePhase(end));
+        expect(end.phase, `Seed ${seed}`).toBe(LAST_REACHABLE_PHASE);
         expect(end.round!.dabbStatus, `Seed ${seed}`).toBe('discarded');
-        expect(end.round!.hands[end.round!.declarer!], `Seed ${seed}`).toHaveLength(
-          handSize(config),
+        // Gespielt wird die Runde nur ohne Abgehen, dann bis zur letzten Karte.
+        const tricks = end.round!.declaration!.mode === 'play' ? handSize(config) : 0;
+        expect(end.round!.tricks, `Seed ${seed}`).toHaveLength(tricks);
+        expect(end.round!.hands.flat(), `Seed ${seed}`).toHaveLength(
+          (handSize(config) - tricks) * playerCount,
         );
         const { trump, mode } = end.round!.declaration!;
         declarations.add(`${trump}/${mode}`);

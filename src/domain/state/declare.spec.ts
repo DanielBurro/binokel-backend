@@ -16,6 +16,8 @@ function round(): RoundState {
     declarer: 1,
     declaration: null,
     melds: [null, null, null],
+    trick: [],
+    tricks: [],
   };
 }
 

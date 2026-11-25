@@ -95,7 +95,7 @@ const gameConfigSchema = shared(
   }) satisfies z.ZodType<GameConfig>,
 );
 
-/** Alle Züge einer Runde; die Engine kann bisher Reizen bis Melden (Rest: Schritte 16–18). */
+/** Alle Züge einer Runde; die Engine kann bisher alles bis zum Stichspiel (Rest: Schritt 18). */
 const playerIntentSchema = client(
   'PlayerIntent',
   exhaustive<PlayerIntent>()(
@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `trick` füllen die Schritte 16–18. */
+/** Auf die ganze Runde ausgelegt; die Felder ab `roundResult` füllen die Schritte 17–18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

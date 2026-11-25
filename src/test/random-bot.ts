@@ -68,7 +68,9 @@ export function concretize(
         type: 'submitMelds',
         meldIds: legal.melds.filter(() => random(2) === 1).map((meld) => meld.id),
       };
-    // Wächst mit den Schritten 16–18.
+    case 'playCard':
+      return { type: 'playCard', cardId: legal.cardIds[random(legal.cardIds.length)] };
+    // Wächst mit Schritt 18.
     default:
       throw new Error(`Zug ${legal.type} wird noch nicht angeboten`);
   }

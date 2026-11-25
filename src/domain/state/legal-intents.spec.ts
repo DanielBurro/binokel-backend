@@ -128,7 +128,9 @@ describe('legalIntents', () => {
       }
 
       expect(state.phase).toBe(after);
-      expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
+      // Im Stichspiel spielt die Vorhand (Sitz 1) aus, nach dem Abgehen ist niemand mehr dran.
+      const offered = seatsOf(state).filter((seat) => legalIntents(state, seat).length > 0);
+      expect(offered).toEqual(mode === 'play' ? [1] : []);
     },
   );
 
@@ -156,9 +158,9 @@ describe('legalIntents', () => {
           let state = started(anyConfig, rawDealer % anyConfig.playerCount);
 
           // Am Ende passen alle, damit das Reizen sicher entschieden wird; danach bleiben je
-          // ein Zug für Aufnehmen, Drücken und Ansage und bis zu n Meldungen.
+          // ein Zug für Aufnehmen, Drücken und Ansage, bis zu n Meldungen und höchstens 48 Karten.
           const passes = Array.from(
-            { length: 2 * anyConfig.playerCount + 3 },
+            { length: 2 * anyConfig.playerCount + 51 },
             (): [number, number] => [1, 0],
           );
           for (const [which, value] of [...list, ...passes]) {
@@ -187,12 +189,10 @@ describe('legalIntents', () => {
           }
 
           expect(activeSeat(state)).toBeNull();
-          // Kein Deadlock: Bietet niemand mehr etwas an, haben alle Berechtigten gemeldet. Es
-          // folgt das Stichspiel (Schritt 16), beim Abgehen die Abrechnung (Schritt 17).
+          // Kein Deadlock: Bietet niemand mehr etwas an, steht die Runde in der Abrechnung
+          // (Schritt 17), nach dem letzten Stich oder direkt nach dem Abgehen.
           expect(state.round?.dabbStatus).toBe('discarded');
-          expect(state.phase).toBe(
-            state.round?.declaration?.mode === 'abgehen' ? 'score' : 'trick',
-          );
+          expect(state.phase).toBe('score');
         }),
       );
     });

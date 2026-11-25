@@ -23,6 +23,8 @@ function round(overrides: Partial<RoundState> = {}): RoundState {
     declarer: 1,
     declaration: null,
     melds: [null, null, null],
+    trick: [],
+    tricks: [],
     ...overrides,
   };
 }

@@ -100,7 +100,7 @@ describe('activeSeat', () => {
     ).toBe(2);
   });
 
-  it.each<Phase>(['created', 'trick', 'terminated'])('ist in Phase %s niemand', (phase) => {
+  it.each<Phase>(['created', 'score', 'terminated'])('ist in Phase %s niemand', (phase) => {
     expect(activeSeat({ ...started(), phase })).toBeNull();
   });
 
