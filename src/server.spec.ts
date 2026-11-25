@@ -384,6 +384,86 @@ describe('Socket.IO-Durchstich', () => {
     }
   });
 
+  it('spielt einen Stich mit Farb- und Trumpfzwang und zeigt ihn allen', async () => {
+    const { players } = await fullRoom();
+    const [anna, ben, cem] = players;
+    await cem.emit('game:intent', { expectedVersion: 1, intent: { type: 'bid', amount: 160 } });
+    await anna.emit('game:intent', { expectedVersion: 2, intent: { type: 'pass' } });
+    await ben.emit('game:intent', { expectedVersion: 3, intent: { type: 'pass' } });
+    await cem.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } });
+    const taken = playerViewSchema.parse(await cem.waitFor('game:state', stateWith(5)));
+    await cem.emit('game:intent', {
+      expectedVersion: 5,
+      intent: { type: 'discardToDabb', cardIds: taken.hand.slice(0, 4).map((card) => card.id) },
+    });
+    await cem.emit('game:intent', {
+      expectedVersion: 6,
+      intent: { type: 'declare', trump: 'herz', mode: 'play' },
+    });
+    const meld = { type: 'submitMelds', meldIds: [] };
+    await cem.emit('game:intent', { expectedVersion: 7, intent: meld });
+    await anna.emit('game:intent', { expectedVersion: 8, intent: meld });
+    await ben.emit('game:intent', { expectedVersion: 9, intent: meld });
+    const playCard = (player: TestClient, expectedVersion: number, cardId: string) =>
+      player.emit('game:intent', { expectedVersion, intent: { type: 'playCard', cardId } });
+
+    // Ben spielt als Vorhand aus, mit dem ungemischten Blatt darf er alles legen.
+    const opening = playerViewSchema.parse(await ben.waitFor('game:state', stateWith(10)));
+    expect(opening).toMatchObject({ phase: 'trick', activeSeat: 1, trick: { plays: [] } });
+    expect(opening.availableActions).toEqual([
+      { type: 'playCard', cardIds: opening.hand.map((card) => card.id) },
+    ]);
+    await expect(playCard(ben, 10, 'eichel-ass-1')).resolves.toEqual({ ok: true, version: 11 });
+
+    // Cem hat kein Eichel und muss trumpfen.
+    await expect(cem.waitFor('game:state', stateWith(11))).resolves.toMatchObject({
+      activeSeat: 2,
+      trick: { plays: [{ seat: 1, card: { id: 'eichel-ass-1' } }] },
+      availableActions: [
+        { type: 'playCard', cardIds: ['herz-ass-1', 'herz-ass-2', 'herz-ober-1', 'herz-ober-2'] },
+      ],
+    });
+    await expect(playCard(cem, 11, 'gruen-unter-1')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'CARD_NOT_ALLOWED' },
+    });
+    await expect(playCard(cem, 11, 'herz-ober-1')).resolves.toEqual({ ok: true, version: 12 });
+
+    // Anna muss Eichel bedienen, auch wenn sie den Trumpf nicht schlagen kann.
+    await expect(playCard(anna, 12, 'herz-zehn-1')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'CARD_NOT_ALLOWED' },
+    });
+    await expect(playCard(anna, 12, 'eichel-unter-1')).resolves.toEqual({ ok: true, version: 13 });
+
+    for (const player of [anna, ben, cem]) {
+      const view = playerViewSchema.parse(await player.waitFor('game:state', stateWith(13)));
+      expect(view).toMatchObject({
+        phase: 'trick',
+        activeSeat: 2,
+        trick: { plays: [] },
+        lastTrick: {
+          plays: [
+            { seat: 1, card: { id: 'eichel-ass-1' } },
+            { seat: 2, card: { id: 'herz-ober-1' } },
+            { seat: 0, card: { id: 'eichel-unter-1' } },
+          ],
+          winner: 2,
+        },
+      });
+      expect(view.seats.map((seat) => seat.handSize)).toEqual([11, 11, 11]);
+      await expect(
+        player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 13),
+      ).resolves.toMatchObject({
+        version: 13,
+        events: [
+          { type: 'cardPlayed', seat: 0, card: { id: 'eichel-unter-1' } },
+          { type: 'trickWon', winner: 2 },
+        ],
+      });
+    }
+  });
+
   it('beantwortet fehlerhafte Anfragen mit Fehlercodes', async () => {
     const anna = await client();
 
