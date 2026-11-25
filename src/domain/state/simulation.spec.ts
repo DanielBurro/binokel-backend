@@ -13,26 +13,29 @@ import {
 import { chooseMove, seededRandom, shuffle } from '../../test/random-bot';
 import { applyIntent } from './apply-intent';
 import { activeSeat, createGame, DECLARE_MODES, type GameState, type Phase } from './game-state';
-import { SYSTEM } from './intents';
+import { SYSTEM, type Intent } from './intents';
+import { everyoneReady } from './next-round';
 import { legalIntents } from './legal-intents';
 import { MELD_GROUP, MELD_GROUPS, meldPoints } from '../melds/meld';
 
 /*
- * Simulationstest (Planschritt 32, Abnahme von M2): Ein Zufalls-Bot spielt viele Runden in allen
- * vier Konfigurationen und prüft nach jedem Zug die Invarianten. Er wächst mit jedem Regelschritt,
- * bis er ganze Partien bis zum Spielende spielt.
+ * Simulationstest (Planschritt 32, Abnahme von M2): Ein Zufalls-Bot spielt in allen vier
+ * Konfigurationen ganze Partien bis zum Spielende und prüft nach jedem Zug die Invarianten, nach
+ * jeder Runde die Wertung und am Ende den Sieger.
  */
 
-/** Bis hierhin reichen die umgesetzten Regeln; mit Schritt 18 folgen weitere Runden. */
-const LAST_REACHABLE_PHASE: Phase = 'score';
-const ROUNDS_PER_CONFIG = 500;
-/** Obergrenze gegen Endlosschleifen; eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000, alle Karten). */
-const MAX_MOVES = 500;
+/** Je Konfiguration; zusammen 240 Partien mit rund 2400 Runden. */
+const GAMES_PER_CONFIG = 60;
+/**
+ * Obergrenze gegen Endlosschleifen: Eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000,
+ * alle Karten), eine Partie bisher wenige Dutzend Runden.
+ */
+const MAX_MOVES_PER_GAME = 20_000;
 const DECK_EYES = 240;
 /**
- * 500 ganze Runden je Konfiguration brauchen lokal rund 1 s, auf dem CI-Runner mit Coverage aber
- * über 5 s, das Standardlimit von Vitest. Großzügig bemessen, weil der Test mit Schritt 17 und 18
- * weiter wächst.
+ * 60 Partien mit zusammen rund 600 Runden brauchen je Konfiguration lokal gut 2 s, auf dem
+ * CI-Runner mit Coverage etwa das Fünffache. Das Standardlimit von Vitest (5 s) reicht dafür nicht
+ * (siehe PR #26).
  */
 const SIMULATION_TIMEOUT_MS = 60_000;
 /** Phasen, in denen noch nicht angesagt ist. */
@@ -183,7 +186,7 @@ const PLAYED_ROUND_EYES = 250;
  * Prüft die Wertung einer fertigen Runde gegen die Tabelle „Rundenwertung“ der Studienarbeit. Augen,
  * Rundung und Meldesummen rechnet der Test selbst aus, je Sitz statt je Partei aufsummiert.
  */
-function checkScoring(end: GameState, context: string): void {
+function checkScoring(end: GameState, before: readonly number[], context: string): void {
   const { round, config } = end;
   const { result, declarer, declaration, bidding, tricks, melds, discarded } = round!;
   const n = config.playerCount;
@@ -227,77 +230,124 @@ function checkScoring(end: GameState, context: string): void {
     );
   }
 
-  // Erste Runde: Die Punktestände sind genau die Veränderungen dieser Runde.
-  expect(end.scores, context).toEqual(parties.map((party) => party.delta));
+  // Die Punktestände wachsen genau um die Veränderungen dieser Runde.
+  expect(end.scores, context).toEqual(parties.map((party, index) => before[index] + party.delta));
 }
 
-function playRound(config: GameConfig, seed: number): GameState {
+/** Spielende unabhängig von der Engine: Eine Partei liegt allein vorn, mit mindestens 1000. */
+function expectedGameWinner(scores: readonly number[]): number | null {
+  const best = Math.max(...scores);
+  const leaders = scores.filter((score) => score === best).length;
+  return best >= 1000 && leaders === 1 ? scores.indexOf(best) : null;
+}
+
+/** Was nach jeder fertigen Runde gelten muss, unabhängig davon, ob das Spiel weitergeht. */
+function checkFinishedRound(scored: GameState, before: readonly number[], context: string): void {
+  const { round, config } = scored;
+  expect(round!.dabbStatus, context).toBe('discarded');
+  // Gespielt wird die Runde nur ohne Abgehen, dann bis zur letzten Karte.
+  const tricks = round!.declaration!.mode === 'play' ? handSize(config) : 0;
+  expect(round!.tricks, context).toHaveLength(tricks);
+  expect(round!.hands.flat(), context).toHaveLength(
+    (handSize(config) - tricks) * config.playerCount,
+  );
+  // Am Ende hat jeder Berechtigte gemeldet, und nur die.
+  round!.melds.forEach((entry, seat) =>
+    expect(entry !== null, `${context}, Sitz ${seat}`).toBe(eligible(scored, seat)),
+  );
+  checkScoring(scored, before, context);
+
+  // Spielende nach Phase 8: weiter in der Abrechnung, oder Schluss mit genau einem Sieger.
+  const winner = expectedGameWinner(scored.scores);
+  expect(scored.phase, context).toBe(winner === null ? 'score' : 'terminated');
+  expect(scored.winners, context).toEqual(winner === null ? null : [winner]);
+}
+
+interface PlayedGame {
+  readonly end: GameState;
+  /** Der Zustand direkt nach jeder Abrechnung, in Spielreihenfolge. */
+  readonly rounds: readonly GameState[];
+}
+
+/**
+ * Spielt eine ganze Partie: Der Bot wählt Züge aus `legalIntents`. Haben alle die nächste Runde
+ * bestätigt, teilt der Test wie der GameService mit frisch gemischtem Blatt aus.
+ */
+function playGame(config: GameConfig, seed: number): PlayedGame {
   const random = seededRandom(seed);
-  const dealer = random(config.playerCount);
-  const started = applyIntent(createGame(config, dealer), SYSTEM, {
+  const deal = (): Intent => ({
     type: 'startRound',
     shuffledDeck: shuffle(buildDeck(config.deckSize), random),
   });
+  const started = applyIntent(createGame(config, random(config.playerCount)), SYSTEM, deal());
   if (!started.ok) throw new Error(`Seed ${seed}: ${started.code}`);
 
   let state = started.state;
-  for (let moves = 0; moves < MAX_MOVES; moves++) {
+  const rounds: GameState[] = [];
+  for (let moves = 0; moves < MAX_MOVES_PER_GAME; moves++) {
+    const context = `Seed ${seed}, Version ${state.version}`;
     checkInvariants(state, seed);
-    checkTricks(state, `Seed ${seed}, Version ${state.version}`);
-    const move = chooseMove(state, random);
-    if (move === null) return state;
-    if (move.intent.type === 'playCard') {
-      checkFollowing(
-        state,
-        move.seat,
-        move.intent.cardId,
-        `Seed ${seed}, Version ${state.version}`,
-      );
+    checkTricks(state, context);
+
+    if (everyoneReady(state)) {
+      const next = applyIntent(state, SYSTEM, deal());
+      if (!next.ok) throw new Error(`${context}: Austeilen abgelehnt mit ${next.code}`);
+      // Der Geber rückt um einen Sitz weiter, die Punktestände bleiben.
+      expect(next.state.dealer, context).toBe((state.dealer + 1) % config.playerCount);
+      expect(next.state.scores, context).toEqual(state.scores);
+      state = next.state;
+      continue;
     }
 
+    const move = chooseMove(state, random);
+    if (move === null) break;
+    if (move.intent.type === 'playCard') {
+      checkFollowing(state, move.seat, move.intent.cardId, context);
+    }
     const result = applyIntent(state, move.seat, move.intent);
     if (!result.ok) {
-      throw new Error(`Seed ${seed}: ${JSON.stringify(move)} abgelehnt mit ${result.code}`);
+      throw new Error(`${context}: ${JSON.stringify(move)} abgelehnt mit ${result.code}`);
     }
-    expect(result.state.version, `Seed ${seed}`).toBe(state.version + 1);
+    expect(result.state.version, context).toBe(state.version + 1);
+
+    if (state.round!.result === null && result.state.round!.result !== null) {
+      checkFinishedRound(result.state, state.scores, `${context}, Runde ${rounds.length + 1}`);
+      rounds.push(result.state);
+    }
     state = result.state;
   }
-  throw new Error(`Seed ${seed}: nach ${MAX_MOVES} Zügen kein Ende`);
+
+  // Kein Deadlock: Bietet niemand mehr etwas an, ist das Spiel regulär zu Ende.
+  expect(state.phase, `Seed ${seed}`).toBe('terminated');
+  expect(state.abortReason, `Seed ${seed}`).toBeNull();
+  return { end: state, rounds };
 }
 
 describe('Simulation mit Zufalls-Bot', () => {
   it.each(configs)(
-    'spielt bei %i Spielern und %i Karten jede Runde ohne Invariantenverletzung durch',
+    'spielt bei %i Spielern und %i Karten ganze Partien ohne Invariantenverletzung bis zum Ende',
     (playerCount, deckSize) => {
       const config = configFor(playerCount, deckSize);
       const declarations = new Set<string>();
       const meldKinds = new Set<string>();
       const outcomes = new Set<string>();
-      for (let round = 0; round < ROUNDS_PER_CONFIG; round++) {
-        const seed = playerCount * 100_000 + deckSize * 1_000 + round;
-        const end = playRound(config, seed);
-
-        // Kein Deadlock: Bietet niemand mehr etwas an, ist die letzte erreichbare Phase erreicht.
-        expect(end.phase, `Seed ${seed}`).toBe(LAST_REACHABLE_PHASE);
-        expect(end.round!.dabbStatus, `Seed ${seed}`).toBe('discarded');
-        // Gespielt wird die Runde nur ohne Abgehen, dann bis zur letzten Karte.
-        const tricks = end.round!.declaration!.mode === 'play' ? handSize(config) : 0;
-        expect(end.round!.tricks, `Seed ${seed}`).toHaveLength(tricks);
-        expect(end.round!.hands.flat(), `Seed ${seed}`).toHaveLength(
-          (handSize(config) - tricks) * playerCount,
-        );
-        const { trump, mode } = end.round!.declaration!;
-        declarations.add(`${trump}/${mode}`);
-        checkScoring(end, `Seed ${seed}`);
-        outcomes.add(end.round!.result!.outcome);
-
-        // Am Ende hat jeder Berechtigte gemeldet, und nur die.
-        end.round!.melds.forEach((entry, seat) => {
-          expect(entry !== null, `Seed ${seed}, Sitz ${seat}`).toBe(eligible(end, seat));
-          entry?.melds.forEach((meld) => meldKinds.add(meld.kind));
-        });
+      let totalRounds = 0;
+      for (let game = 0; game < GAMES_PER_CONFIG; game++) {
+        const seed = playerCount * 100_000 + deckSize * 1_000 + game;
+        const { rounds } = playGame(config, seed);
+        totalRounds += rounds.length;
+        for (const scored of rounds) {
+          const { trump, mode } = scored.round!.declaration!;
+          declarations.add(`${trump}/${mode}`);
+          outcomes.add(scored.round!.result!.outcome);
+          scored.round!.melds.forEach((entry) =>
+            entry?.melds.forEach((meld) => meldKinds.add(meld.kind)),
+          );
+        }
       }
 
+      // Partien gehen über mehrere Runden, sonst würde Schritt 18 kaum geprüft.
+      expect(totalRounds).toBeGreaterThan(2 * GAMES_PER_CONFIG);
       // Der Bot hat jede Kombination aus Trumpf und Spielart mindestens einmal durchgespielt.
       expect(declarations.size).toBe(SUITS.length * DECLARE_MODES.length);
       // Die häufigen Meldearten kommen vor; den Diß gibt es nur bei 48 Karten. Die 1000er sind
@@ -316,7 +366,7 @@ describe('Simulation mit Zufalls-Bot', () => {
   it('ist über den Seed reproduzierbar', () => {
     const config = configFor(4, 48);
 
-    expect(playRound(config, 42)).toEqual(playRound(config, 42));
-    expect(playRound(config, 42)).not.toEqual(playRound(config, 43));
+    expect(playGame(config, 42).end).toEqual(playGame(config, 42).end);
+    expect(playGame(config, 42).end).not.toEqual(playGame(config, 43).end);
   });
 });
