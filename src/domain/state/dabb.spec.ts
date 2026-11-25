@@ -22,6 +22,7 @@ function round(overrides: Partial<RoundState> = {}): RoundState {
     bidding: { highestBid: 150, highestBidder: 1, passed: [2, 0], activeSeat: null },
     declarer: 1,
     declaration: null,
+    melds: [null, null, null],
     ...overrides,
   };
 }

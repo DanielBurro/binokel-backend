@@ -14,6 +14,7 @@ import { activeSeat, createGame, type GameState } from './game-state';
 import { concretize, seededRandom } from '../../test/random-bot';
 import { SYSTEM, type IntentResult } from './intents';
 import { legalIntents } from './legal-intents';
+import { bestMelds } from '../melds/best-melds';
 
 const configFor = (playerCount: PlayerCount, deckSize: DeckSize): GameConfig => ({
   playerCount,
@@ -108,19 +109,36 @@ describe('legalIntents', () => {
     ]);
   });
 
-  it.each(['play', 'abgehen'] as const)(
-    'bietet nach der Ansage (%s) und nach einem Abbruch nichts mehr an',
-    (mode) => {
-      const declared = ok(applyIntent(discarded(), 2, { type: 'declare', trump: 'gruen', mode }));
-      const aborted = ok(
-        applyIntent(started(config, 0), SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
-      );
+  it.each([
+    ['play', [2, 0, 1], 'trick'],
+    ['abgehen', [0, 1], 'score'],
+  ] as const)(
+    'bietet nach der Ansage (%s) den Meldeberechtigten der Reihe nach ihren Vorschlag an',
+    (mode, order, after) => {
+      let state = ok(applyIntent(discarded(), 2, { type: 'declare', trump: 'gruen', mode }));
 
-      for (const state of [declared, aborted]) {
-        expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
+      for (const seat of order) {
+        expect(seatsOf(state).map((other) => legalIntents(state, other).length)).toEqual(
+          seatsOf(state).map((other) => (other === seat ? 1 : 0)),
+        );
+        expect(legalIntents(state, seat)).toEqual([
+          { type: 'submitMelds', melds: bestMelds(state.round!.hands[seat], 'gruen', 40) },
+        ]);
+        state = ok(applyIntent(state, seat, { type: 'submitMelds', meldIds: [] }));
       }
+
+      expect(state.phase).toBe(after);
+      expect(seatsOf(state).flatMap((seat) => legalIntents(state, seat))).toEqual([]);
     },
   );
+
+  it('bietet nach einem Abbruch nichts mehr an', () => {
+    const aborted = ok(
+      applyIntent(started(config, 0), SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }),
+    );
+
+    expect(seatsOf(aborted).flatMap((seat) => legalIntents(aborted, seat))).toEqual([]);
+  });
 
   describe('Übereinstimmung mit applyIntent', () => {
     const configs = fc.constantFrom(
@@ -138,10 +156,11 @@ describe('legalIntents', () => {
           let state = started(anyConfig, rawDealer % anyConfig.playerCount);
 
           // Am Ende passen alle, damit das Reizen sicher entschieden wird; danach bleiben je
-          // ein Zug für Aufnehmen, Drücken und Ansage.
-          const passes = Array.from({ length: anyConfig.playerCount + 3 }, (): [number, number] => [
-            1, 0,
-          ]);
+          // ein Zug für Aufnehmen, Drücken und Ansage und bis zu n Meldungen.
+          const passes = Array.from(
+            { length: 2 * anyConfig.playerCount + 3 },
+            (): [number, number] => [1, 0],
+          );
           for (const [which, value] of [...list, ...passes]) {
             const offers = seatsOf(state).map((seat) => legalIntents(state, seat));
             const active = offers.findIndex((offer) => offer.length > 0);
@@ -168,11 +187,12 @@ describe('legalIntents', () => {
           }
 
           expect(activeSeat(state)).toBeNull();
-          // Kein Deadlock: Bietet niemand mehr etwas an, ist angesagt. Das Melden folgt mit
-          // Schritt 15.
-          expect(state.phase).toBe('meld');
+          // Kein Deadlock: Bietet niemand mehr etwas an, haben alle Berechtigten gemeldet. Es
+          // folgt das Stichspiel (Schritt 16), beim Abgehen die Abrechnung (Schritt 17).
           expect(state.round?.dabbStatus).toBe('discarded');
-          expect(state.round?.declaration).not.toBeNull();
+          expect(state.phase).toBe(
+            state.round?.declaration?.mode === 'abgehen' ? 'score' : 'trick',
+          );
         }),
       );
     });

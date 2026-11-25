@@ -6,6 +6,7 @@ import { isSeat, type Seat } from '../rules/parties';
 import { bid, openBidding, pass } from './bidding';
 import { discardToDabb, takeDabb } from './dabb';
 import { declare } from './declare';
+import { nextMelder, submitMelds } from './melding';
 import { nextPhase, type AbortReason, type GameState } from './game-state';
 import {
   SYSTEM,
@@ -55,7 +56,9 @@ function applyPlayerIntent(state: GameState, seat: Seat, intent: PlayerIntent): 
       return applyDabb(state, seat, intent);
     case 'declare':
       return applyDeclare(state, seat, intent);
-    // Die Regeln der übrigen Phasen folgen mit den Schritten 15–18.
+    case 'submitMelds':
+      return applyMelds(state, seat, intent);
+    // Die Regeln der übrigen Phasen folgen mit den Schritten 16–18.
     default:
       return fail('WRONG_PHASE');
   }
@@ -93,6 +96,25 @@ function applyDeclare(
   if (!result.ok) return result;
   // Auch beim Abgehen folgt das Melden; dort melden nur die Gegenparteien (Schritt 15).
   return commit(state, { phase: nextPhase(state), round: result.round }, result.events);
+}
+
+function applyMelds(
+  state: GameState,
+  seat: Seat,
+  intent: Extract<PlayerIntent, { type: 'submitMelds' }>,
+): IntentResult {
+  const { round, config } = state;
+  if (state.phase !== 'meld' || round === null) return fail('WRONG_PHASE');
+
+  const result = submitMelds(round, seat, intent.meldIds, config);
+  if (!result.ok) return result;
+  // Haben alle gemeldet, folgt das Stichspiel, beim Abgehen direkt die Abrechnung.
+  const done = nextMelder(result.round, config.playerCount) === null;
+  return commit(
+    state,
+    { phase: done ? nextPhase(state) : state.phase, round: result.round },
+    result.events,
+  );
 }
 
 function applyBidding(
@@ -147,6 +169,7 @@ function startRound(state: GameState, shuffledDeck: readonly Card[]): IntentResu
         bidding: openBidding(forehand, config.playerCount),
         declarer: null,
         declaration: null,
+        melds: hands.map(() => null),
       },
     },
     [{ type: 'roundStarted', dealer, forehand }],

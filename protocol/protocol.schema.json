@@ -457,6 +457,8 @@
                   "WRONG_DISCARD_COUNT",
                   "DUPLICATE_CARDS",
                   "CARD_NOT_IN_HAND",
+                  "DUPLICATE_MELDS",
+                  "MELD_NOT_OFFERED",
                   "STALE_STATE",
                   "INVALID_PAYLOAD",
                   "INVALID_CONFIG",

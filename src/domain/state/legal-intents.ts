@@ -1,13 +1,14 @@
 import type { Seat } from '../rules/parties';
 import { BID_STEP, MAX_BID, minimumBid } from './bidding';
 import { DECLARE_MODES, type GameState } from './game-state';
+import { nextMelder, offeredMelds } from './melding';
 import type { LegalIntent } from './intents';
 
 /**
  * Einzige Quelle für die erlaubten Züge eines Sitzes: Sie speist `availableActions` der
  * Projektion und den Zufalls-Bot des Simulationstests. Jeder Zug, den sie anbietet, muss von
  * `applyIntent` angenommen werden, und nur der Sitz aus `activeSeat` bekommt Angebote. Die
- * übrigen Phasen kommen mit den Schritten 15–18 hinzu.
+ * übrigen Phasen kommen mit den Schritten 16–18 hinzu.
  */
 export function legalIntents(state: GameState, seat: Seat): readonly LegalIntent[] {
   const { phase, round } = state;
@@ -28,6 +29,9 @@ export function legalIntents(state: GameState, seat: Seat): readonly LegalIntent
       // Jede Farbe darf Trumpf werden; zur Wahl steht nur noch die Spielart.
       if (seat !== round.declarer) return [];
       return [{ type: 'declare', modes: [...DECLARE_MODES] }];
+    case 'meld':
+      if (seat !== nextMelder(round, state.config.playerCount)) return [];
+      return [{ type: 'submitMelds', melds: offeredMelds(round, seat, state.config) }];
     default:
       return [];
   }

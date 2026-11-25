@@ -95,7 +95,7 @@ const gameConfigSchema = shared(
   }) satisfies z.ZodType<GameConfig>,
 );
 
-/** Alle Züge einer Runde; die Engine kann bisher Reizen, Dabb und Ansage (Rest: 15–18). */
+/** Alle Züge einer Runde; die Engine kann bisher Reizen bis Melden (Rest: Schritte 16–18). */
 const playerIntentSchema = client(
   'PlayerIntent',
   exhaustive<PlayerIntent>()(

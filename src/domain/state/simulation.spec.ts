@@ -20,8 +20,12 @@ import { legalIntents } from './legal-intents';
  * bis er ganze Partien bis zum Spielende spielt.
  */
 
-/** Bis hierhin reichen die umgesetzten Regeln; ab Schritt 15 rückt das weiter. */
-const LAST_REACHABLE_PHASE: Phase = 'meld';
+/**
+ * Bis hierhin reichen die umgesetzten Regeln: nach dem Melden das Stichspiel, beim Abgehen die
+ * Abrechnung. Ab Schritt 16 rückt das weiter.
+ */
+const lastReachablePhase = (state: GameState): Phase =>
+  state.round!.declaration!.mode === 'abgehen' ? 'score' : 'trick';
 const ROUNDS_PER_CONFIG = 500;
 /** Obergrenze gegen Endlosschleifen; eine Runde braucht bisher höchstens rund 100 Züge. */
 const MAX_MOVES = 500;
@@ -113,7 +117,7 @@ describe('Simulation mit Zufalls-Bot', () => {
         const end = playRound(config, seed);
 
         // Kein Deadlock: Bietet niemand mehr etwas an, ist die letzte erreichbare Phase erreicht.
-        expect(end.phase, `Seed ${seed}`).toBe(LAST_REACHABLE_PHASE);
+        expect(end.phase, `Seed ${seed}`).toBe(lastReachablePhase(end));
         expect(end.round!.dabbStatus, `Seed ${seed}`).toBe('discarded');
         expect(end.round!.hands[end.round!.declarer!], `Seed ${seed}`).toHaveLength(
           handSize(config),
