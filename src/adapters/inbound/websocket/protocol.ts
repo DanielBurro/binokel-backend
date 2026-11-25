@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `declaration` füllen die Schritte 14–18. */
+/** Auf die ganze Runde ausgelegt; die Felder ab `melds` füllen die Schritte 15–18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

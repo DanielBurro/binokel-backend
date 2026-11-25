@@ -164,6 +164,29 @@ describe('projectStateFor', () => {
     });
   });
 
+  it('zeigt allen Sitzen Trumpf und Spielart, sobald angesagt ist', () => {
+    const taken = play(
+      started(config),
+      [2, { type: 'pass' }],
+      [0, { type: 'pass' }],
+      [1, { type: 'takeDabb' }],
+    );
+    const discarded = play(taken, [
+      1,
+      { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) },
+    ]);
+    const declared = play(discarded, [1, { type: 'declare', trump: 'schellen', mode: 'abgehen' }]);
+
+    for (const seat of [0, 1, 2]) {
+      expect(projectStateFor(discarded, seat, seats).declaration).toBeNull();
+      expect(projectStateFor(declared, seat, seats)).toMatchObject({
+        phase: 'meld',
+        declaration: { trump: 'schellen', mode: 'abgehen' },
+      });
+    }
+    expect(projectStateFor(declared, 1, seats).declaration).not.toBe(declared.round!.declaration);
+  });
+
   it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
     const state = play(started(configFor(4, 48)), [2, { type: 'pass' }]);
 
@@ -252,7 +275,7 @@ describe('projectStateFor', () => {
       (n, d) => {
         const leakConfig = configFor(n, d);
         const begun = started(leakConfig);
-        // Sitz 2 bietet 1000 und wird Spielmacher, nimmt auf und drückt.
+        // Sitz 2 bietet 1000 und wird Spielmacher, nimmt auf, drückt und sagt an.
         const decided = play(begun, [2, { type: 'bid', amount: MAX_BID }]);
         const taken = play(decided, [2, { type: 'takeDabb' }]);
         const discarded = play(taken, [
@@ -268,6 +291,7 @@ describe('projectStateFor', () => {
           decided,
           taken,
           discarded,
+          play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }]),
           play(taken, [SYSTEM, { type: 'abortGame', reason: 'PLAYER_LEFT' }]),
         ];
 
