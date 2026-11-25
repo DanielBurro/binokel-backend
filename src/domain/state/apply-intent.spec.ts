@@ -330,11 +330,89 @@ describe('applyIntent', () => {
     });
   });
 
+  describe('Stichspiel', () => {
+    /** Sitz 1 ist Spielmacher mit Herz-Trumpf, alle haben ohne Meldung durchgewunken. */
+    const inTricks = () => {
+      const taken = play(
+        started(),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'play' }],
+        [1, { type: 'submitMelds', meldIds: [] }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+        [0, { type: 'submitMelds', meldIds: [] }],
+      );
+    };
+    /** Der Sitz am Zug legt die erste erlaubte Karte. */
+    const firstLegal = (state: GameState): [Actor, Intent] => {
+      const seat = [0, 1, 2].find((other) => legalIntents(state, other).length > 0)!;
+      const [offer] = legalIntents(state, seat);
+      if (offer.type !== 'playCard') throw new Error(`Unerwartetes Angebot ${offer.type}`);
+      return [seat, { type: 'playCard', cardId: offer.cardIds[0] }];
+    };
+
+    it('lässt die Vorhand ausspielen und meldet jede gelegte Karte', () => {
+      const state = deepFreeze(inTricks());
+      expect(state).toMatchObject({ version: 9, phase: 'trick' });
+
+      const [seat, intent] = firstLegal(state);
+      expect(seat).toBe(1);
+      const result = applyIntent(state, seat, intent);
+
+      expect(result).toMatchObject({
+        ok: true,
+        state: { version: 10, phase: 'trick' },
+        events: [{ type: 'cardPlayed', seat: 1 }],
+      });
+    });
+
+    it('spielt alle Stiche und wechselt danach in die Abrechnung', () => {
+      let state = inTricks();
+      const events: string[] = [];
+      while (state.phase === 'trick') {
+        const result = applyIntent(deepFreeze(state), ...firstLegal(state));
+        if (!result.ok) throw new Error(result.code);
+        events.push(...result.events.map((event) => event.type));
+        state = result.state;
+      }
+
+      expect(state).toMatchObject({ version: 9 + 36, phase: 'score' });
+      expect(state.round!.tricks).toHaveLength(12);
+      expect(state.round!.hands.flat()).toEqual([]);
+      expect(events.filter((type) => type === 'trickWon')).toHaveLength(12);
+    });
+
+    it('lässt den Zustand bei Regelverstößen unverändert', () => {
+      const state = deepFreeze(inTricks());
+      const foreign = state.round!.hands[2][0].id;
+
+      expect(applyIntent(state, 2, { type: 'playCard', cardId: foreign })).toEqual({
+        ok: false,
+        code: 'NOT_YOUR_TURN',
+      });
+      expect(applyIntent(state, 1, { type: 'playCard', cardId: foreign })).toEqual({
+        ok: false,
+        code: 'CARD_NOT_IN_HAND',
+      });
+      expect(state.version).toBe(9);
+    });
+
+    it('nimmt Karten nur im Stichspiel an', () => {
+      const card = started().round!.hands[2][0].id;
+      expect(applyIntent(started(), 2, { type: 'playCard', cardId: card })).toEqual({
+        ok: false,
+        code: 'WRONG_PHASE',
+      });
+    });
+  });
+
   describe('Züge der übrigen Phasen', () => {
-    const later: PlayerIntent[] = [
-      { type: 'playCard', cardId: 'herz-ass-1' },
-      { type: 'readyForNextRound' },
-    ];
+    const later: PlayerIntent[] = [{ type: 'readyForNextRound' }];
 
     it.each(later)('lehnt $type ab, bis die Regeln umgesetzt sind', (intent) => {
       const bidding = deepFreeze(started());

@@ -31,6 +31,8 @@ function round(playerCount: PlayerCount, mode: DeclareMode = 'play'): RoundState
     declarer: 1,
     declaration: { trump: 'herz', mode },
     melds: hands.map(() => null),
+    trick: [],
+    tricks: [],
   };
 }
 
