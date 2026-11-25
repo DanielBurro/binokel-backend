@@ -244,7 +244,7 @@ const availableActionSchema = server(
   ),
 );
 
-/** Auf die ganze Runde ausgelegt; die Felder ab `trick` füllen die Schritte 16–18. */
+/** Auf die ganze Runde ausgelegt; die Felder ab `roundResult` füllen die Schritte 17–18. */
 export const playerViewSchema = server(
   'PlayerView',
   z.object({

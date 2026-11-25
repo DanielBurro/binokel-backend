@@ -44,6 +44,18 @@ function started(config: GameConfig): GameState {
   ]);
 }
 
+/** Der Sitz am Zug legt die erste erlaubte Karte, so oft wie angegeben. */
+function playCards(state: GameState, count: number): GameState {
+  let current = state;
+  for (let played = 0; played < count; played++) {
+    const seat = [0, 1, 2, 3].find((other) => legalIntents(current, other).length > 0)!;
+    const [offer] = legalIntents(current, seat);
+    if (offer.type !== 'playCard') throw new Error(`Unerwartetes Angebot ${offer.type}`);
+    current = play(current, [seat, { type: 'playCard', cardId: offer.cardIds[0] }]);
+  }
+  return current;
+}
+
 /** Jeder Meldeberechtigte meldet der Reihe nach seinen ganzen Vorschlag. */
 function meldEverything(state: GameState): GameState {
   let current = state;
@@ -232,6 +244,65 @@ describe('projectStateFor', () => {
     expect(view.melds[1]!.melds[0]?.cards).not.toBe(expected[1]!.melds[0]?.cards);
   });
 
+  describe('Stiche', () => {
+    /** Sitz 1 spielt mit Herz-Trumpf, niemand meldet; die Vorhand (Sitz 1) spielt aus. */
+    const inTricks = () => {
+      const taken = play(
+        started(config),
+        [2, { type: 'pass' }],
+        [0, { type: 'pass' }],
+        [1, { type: 'takeDabb' }],
+      );
+      return play(
+        taken,
+        [1, { type: 'discardToDabb', cardIds: taken.round!.hands[1].slice(0, 4).map((c) => c.id) }],
+        [1, { type: 'declare', trump: 'herz', mode: 'play' }],
+        [1, { type: 'submitMelds', meldIds: [] }],
+        [2, { type: 'submitMelds', meldIds: [] }],
+        [0, { type: 'submitMelds', meldIds: [] }],
+      );
+    };
+
+    it('zeigt allen den laufenden Stich und dem Sitz am Zug seine erlaubten Karten', () => {
+      const state = playCards(inTricks(), 1);
+      const [lead] = state.round!.trick;
+
+      for (const seat of [0, 1, 2]) {
+        expect(projectStateFor(state, seat, seats)).toMatchObject({
+          phase: 'trick',
+          trick: { plays: [lead] },
+          lastTrick: null,
+          activeSeat: 2,
+        });
+      }
+      expect(projectStateFor(state, 2, seats).availableActions).toEqual([
+        { type: 'playCard', cardIds: expect.any(Array) },
+      ]);
+      expect(projectStateFor(state, 0, seats).availableActions).toEqual([]);
+    });
+
+    it('zeigt nach dem Stich den abgeschlossenen Stich mit Gewinner', () => {
+      const state = playCards(inTricks(), 3);
+      const view = projectStateFor(state, 0, seats);
+
+      expect(view.trick).toEqual({ plays: [] });
+      expect(view.lastTrick).toEqual(state.round!.tricks[0]);
+      expect(view.lastTrick).not.toBe(state.round!.tricks[0]);
+      expect(view.activeSeat).toBe(state.round!.tricks[0].winner);
+    });
+
+    it('zeigt in der Abrechnung keinen laufenden, aber den letzten Stich', () => {
+      const state = playCards(inTricks(), 36);
+
+      expect(projectStateFor(state, 0, seats)).toMatchObject({
+        phase: 'score',
+        trick: null,
+        lastTrick: state.round!.tricks[11],
+        hand: [],
+      });
+    });
+  });
+
   it('lässt die Felder der späteren Phasen leer, bis ihre Regeln umgesetzt sind', () => {
     const state = play(started(configFor(4, 48)), [2, { type: 'pass' }]);
 
@@ -309,13 +380,14 @@ describe('projectStateFor', () => {
 
     /**
      * Was der Sitz sehen darf: eigene Hand, als Spielmacher dazu den aufgenommenen Dabb, und die
-     * gemeldeten Karten aller Sitze, weil Meldungen öffentlich sind.
+     * gemeldeten und gelegten Karten aller Sitze, weil beides öffentlich ist.
      */
     function visibleTo(state: GameState, seat: Seat): Set<string> {
-      const { hands, dabb, discarded, dabbStatus, declarer, melds } = state.round!;
+      const { hands, dabb, discarded, dabbStatus, declarer, melds, trick, tricks } = state.round!;
       const own = [...hands[seat]];
       if (seat === declarer && dabbStatus !== 'table') own.push(...dabb, ...discarded);
       own.push(...melds.flatMap((entry) => entry?.melds.flatMap((meld) => meld.cards) ?? []));
+      own.push(...[...trick, ...tricks.flatMap((done) => done.plays)].map((p) => p.card));
       return new Set(own.map((card) => card.id));
     }
 
@@ -342,6 +414,10 @@ describe('projectStateFor', () => {
           discarded,
           play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }]),
           meldEverything(play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }])),
+          playCards(
+            meldEverything(play(discarded, [2, { type: 'declare', trump: 'herz', mode: 'play' }])),
+            n + 1,
+          ),
           meldEverything(
             play(discarded, [2, { type: 'declare', trump: 'eichel', mode: 'abgehen' }]),
           ),
