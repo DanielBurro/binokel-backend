@@ -103,6 +103,8 @@ export interface RoundState {
   readonly trick: readonly TrickPlay[];
   /** Abgeschlossene Stiche in Spielreihenfolge. */
   readonly tricks: readonly CompletedTrick[];
+  /** Rundenwertung; null bis zur Abrechnung. */
+  readonly result: RoundResult | null;
 }
 
 export interface GameState {

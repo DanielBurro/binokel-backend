@@ -33,6 +33,7 @@ function round(playerCount: PlayerCount, mode: DeclareMode = 'play'): RoundState
     melds: hands.map(() => null),
     trick: [],
     tricks: [],
+    result: null,
   };
 }
 

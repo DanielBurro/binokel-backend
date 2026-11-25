@@ -56,6 +56,7 @@ function round({
     melds: melds.map((points) => (points === null ? null : { melds: [], points })),
     trick: [],
     tricks,
+    result: null,
   };
 }
 

@@ -6,6 +6,7 @@ import { applyIntent } from './apply-intent';
 import { OPENING_BID } from './bidding';
 import { createGame, type DeclareMode, type GameState } from './game-state';
 import { legalIntents } from './legal-intents';
+import { scoreRound } from './scoring';
 import { SYSTEM, type Actor, type Intent, type IntentResult, type PlayerIntent } from './intents';
 
 const config: GameConfig = {
@@ -303,6 +304,18 @@ describe('applyIntent', () => {
         null,
         { melds: [], points: 0 },
       ]);
+      // Spielmacher −150 (Reizwert), Gegner 0 Meldepunkte + 3 · 10.
+      expect(state.round!.result?.outcome).toBe('abgehen');
+      expect(state.scores).toEqual([30, -150, 30]);
+    });
+
+    it('meldet mit dem Abschluss beim Abgehen auch die Wertung', () => {
+      const result = applyIntent(play(declared('abgehen'), pass(2)), 0, pass(0)[1]);
+
+      expect(result.ok && result.events).toEqual([
+        { type: 'meldsSubmitted', seat: 0, melds: [], points: 0 },
+        { type: 'roundScored', outcome: 'abgehen' },
+      ]);
     });
 
     it('lässt den Zustand bei Regelverstößen unverändert', () => {
@@ -385,6 +398,17 @@ describe('applyIntent', () => {
       expect(state.round!.tricks).toHaveLength(12);
       expect(state.round!.hands.flat()).toEqual([]);
       expect(events.filter((type) => type === 'trickWon')).toHaveLength(12);
+      // Die letzte Karte schließt den Stich und die Runde ab.
+      expect(events.slice(-3)).toEqual(['cardPlayed', 'trickWon', 'roundScored']);
+    });
+
+    it('wertet die Runde nach dem letzten Stich und schreibt die Punktestände fort', () => {
+      let state = inTricks();
+      while (state.phase === 'trick') state = play(state, firstLegal(state));
+      const { result } = state.round!;
+
+      expect(result).toEqual(scoreRound(state.round!, state.config));
+      expect(state.scores).toEqual(result!.parties.map((party) => party.delta));
     });
 
     it('lässt den Zustand bei Regelverstößen unverändert', () => {
