@@ -464,6 +464,108 @@ describe('Socket.IO-Durchstich', () => {
     }
   });
 
+  describe('Abrechnung', () => {
+    /** Reizen bis zur Ansage: Cem wird mit 160 Spielmacher, drückt und sagt Herz an. */
+    async function declared(mode: 'play' | 'abgehen') {
+      const { players } = await fullRoom();
+      const [anna, ben, cem] = players;
+      await cem.emit('game:intent', { expectedVersion: 1, intent: { type: 'bid', amount: 160 } });
+      await anna.emit('game:intent', { expectedVersion: 2, intent: { type: 'pass' } });
+      await ben.emit('game:intent', { expectedVersion: 3, intent: { type: 'pass' } });
+      await cem.emit('game:intent', { expectedVersion: 4, intent: { type: 'takeDabb' } });
+      const taken = playerViewSchema.parse(await cem.waitFor('game:state', stateWith(5)));
+      await cem.emit('game:intent', {
+        expectedVersion: 5,
+        intent: { type: 'discardToDabb', cardIds: taken.hand.slice(0, 4).map((card) => card.id) },
+      });
+      await cem.emit('game:intent', {
+        expectedVersion: 6,
+        intent: { type: 'declare', trump: 'herz', mode },
+      });
+      return players;
+    }
+    const meld = (player: TestClient, expectedVersion: number, meldIds: string[]) =>
+      player.emit('game:intent', { expectedVersion, intent: { type: 'submitMelds', meldIds } });
+
+    it('wertet das Abgehen nach den Meldungen der Gegner', async () => {
+      const [anna, ben, cem] = await declared('abgehen');
+      // Cem meldet nicht; Anna hat nichts, Ben meldet seine zwei Grün-Paare.
+      await expect(meld(anna, 7, [])).resolves.toEqual({ ok: true, version: 8 });
+      await expect(meld(ben, 8, ['paar-gruen-1', 'paar-gruen-2'])).resolves.toEqual({
+        ok: true,
+        version: 9,
+      });
+
+      for (const player of [anna, ben, cem]) {
+        const view = playerViewSchema.parse(await player.waitFor('game:state', stateWith(9)));
+        expect(view).toMatchObject({
+          phase: 'score',
+          activeSeat: null,
+          availableActions: [],
+          // Gegner: Meldepunkte plus 3 · 10, Spielmacher: −Reizwert.
+          roundResult: {
+            outcome: 'abgehen',
+            parties: [
+              { trickPoints: 0, meldPoints: 0, meldsCounted: true, delta: 30 },
+              { trickPoints: 0, meldPoints: 40, meldsCounted: true, delta: 70 },
+              { trickPoints: 0, meldPoints: 0, meldsCounted: false, delta: -160 },
+            ],
+          },
+          scores: [30, 70, -160],
+        });
+        await expect(
+          player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 9),
+        ).resolves.toMatchObject({
+          events: [
+            { type: 'meldsSubmitted', seat: 1 },
+            { type: 'roundScored', outcome: 'abgehen' },
+          ],
+        });
+      }
+    });
+
+    it('wertet ein ausgespieltes Spiel nach dem letzten Stich', async () => {
+      const players = await declared('play');
+      const [anna, ben, cem] = players;
+      await meld(cem, 7, []);
+      await meld(anna, 8, []);
+      await meld(ben, 9, []);
+
+      // Alle 36 Karten: Wer am Zug ist, legt seine erste erlaubte Karte.
+      for (let version = 10; version < 46; version++) {
+        const { activeSeat } = playerViewSchema.parse(
+          await anna.waitFor('game:state', stateWith(version)),
+        );
+        const active = players[activeSeat!];
+        const view = playerViewSchema.parse(await active.waitFor('game:state', stateWith(version)));
+        const [offer] = view.availableActions;
+        if (offer.type !== 'playCard') throw new Error(`Unerwartetes Angebot ${offer.type}`);
+        await expect(
+          active.emit('game:intent', {
+            expectedVersion: version,
+            intent: { type: 'playCard', cardId: offer.cardIds[0] },
+          }),
+        ).resolves.toEqual({ ok: true, version: version + 1 });
+      }
+
+      for (const player of [anna, ben, cem]) {
+        const view = playerViewSchema.parse(await player.waitFor('game:state', stateWith(46)));
+        expect(view).toMatchObject({ phase: 'score', hand: [], trick: null });
+        expect(view.roundResult?.outcome).toMatch(/^(made|failed)$/);
+        expect(view.scores).toEqual(view.roundResult!.parties.map((party) => party.delta));
+        await expect(
+          player.waitFor<GameEventBatch>('game:events', (batch) => batch.version === 46),
+        ).resolves.toMatchObject({
+          events: [
+            { type: 'cardPlayed' },
+            { type: 'trickWon' },
+            { type: 'roundScored', outcome: view.roundResult!.outcome },
+          ],
+        });
+      }
+    });
+  });
+
   it('beantwortet fehlerhafte Anfragen mit Fehlercodes', async () => {
     const anna = await client();
 
