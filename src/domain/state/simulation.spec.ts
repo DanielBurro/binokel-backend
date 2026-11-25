@@ -29,6 +29,12 @@ const ROUNDS_PER_CONFIG = 500;
 /** Obergrenze gegen Endlosschleifen; eine Runde braucht höchstens rund 150 Züge (Reizen bis 1000, alle Karten). */
 const MAX_MOVES = 500;
 const DECK_EYES = 240;
+/**
+ * 500 ganze Runden je Konfiguration brauchen lokal rund 1 s, auf dem CI-Runner mit Coverage aber
+ * über 5 s, das Standardlimit von Vitest. Großzügig bemessen, weil der Test mit Schritt 17 und 18
+ * weiter wächst.
+ */
+const SIMULATION_TIMEOUT_MS = 60_000;
 /** Phasen, in denen noch nicht angesagt ist. */
 const BEFORE_DECLARATION: ReadonlySet<Phase> = new Set(['bidding', 'dabb', 'declare']);
 
@@ -239,6 +245,7 @@ describe('Simulation mit Zufalls-Bot', () => {
       );
       expect(meldKinds.has('diss')).toBe(deckSize === 48);
     },
+    SIMULATION_TIMEOUT_MS,
   );
 
   it('ist über den Seed reproduzierbar', () => {
