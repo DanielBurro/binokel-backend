@@ -1,4 +1,5 @@
 import type { Card } from '../../domain/cards/card';
+import type { Meld } from '../../domain/melds/meld';
 import { assertSeat, partyOf, type Seat } from '../../domain/rules/parties';
 import { activeSeat, type GameState, type RoundState } from '../../domain/state/game-state';
 import { legalIntents } from '../../domain/state/legal-intents';
@@ -43,8 +44,13 @@ export function projectStateFor(
     declaration: round?.declaration
       ? { trump: round.declaration.trump, mode: round.declaration.mode }
       : null,
-    // Meldungen, Stiche, Abrechnung und Spielende füllen die Schritte 15–18.
-    melds: seats.map(() => null),
+    // Gemeldete Karten sind öffentlich (FA-15) und gehen deshalb an alle Sitze.
+    melds: round
+      ? round.melds.map((entry) =>
+          entry ? { melds: entry.melds.map(toMeld), points: entry.points } : null,
+        )
+      : seats.map(() => null),
+    // Stiche, Abrechnung und Spielende füllen die Schritte 16–18.
     trick: null,
     lastTrick: null,
     roundResult: null,
@@ -76,6 +82,10 @@ function projectDabb(round: RoundState, seat: Seat): DabbView {
         cards: visible ? discarded.map(toCard) : null,
       };
   }
+}
+
+function toMeld({ id, kind, cards, points }: Meld): Meld {
+  return { id, kind, cards: cards.map(toCard), points };
 }
 
 function toCard({ id, suit, rank, copy }: Card): Card {
